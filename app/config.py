@@ -11,6 +11,16 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
 
+    # ELK Stack Settings
+    elasticsearch_url: Optional[str] = None
+    elasticsearch_host: str = "elasticsearch"
+    elasticsearch_port: int = 9200
+    kibana_host: str = "kibana"
+    kibana_port: int = 5601
+    logstash_host: str = "logstash"
+    logstash_port: int = 5044
+    logstash_tcp_port: int = 5000
+
     class Config:
         env_file = ".env"
         extra = "ignore"  # Ignore extra environment variables
