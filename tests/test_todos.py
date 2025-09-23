@@ -128,7 +128,7 @@ def test_search_todos(client: TestClient, test_user):
 
 def test_unauthorized_access(client: TestClient, test_todo):
     response = client.post("/api/v1/todos/", json=test_todo)
-    assert response.status_code == 401
+    assert response.status_code == 403
 
 
 def test_access_other_users_todo(client: TestClient, test_todo):
