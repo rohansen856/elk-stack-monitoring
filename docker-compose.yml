@@ -53,9 +53,12 @@ services:
       - "XPACK_MONITORING_ELASTICSEARCH_HOSTS=http://elasticsearch:9200"
       - "LOG_LEVEL=info"
     ports:
-      - "5044:5044"
-      - "5000:5000"
-      - "9600:9600"
+      - "5044:5044"     # Beats input
+      - "5000:5000"     # TCP app logs
+      - "9600:9600"     # Logstash API
+      - "514:514/udp"   # Syslog UDP
+      - "514:514/tcp"   # Syslog TCP
+      - "12201:12201"   # GELF
     volumes:
       - ./logstash/pipeline:/usr/share/logstash/pipeline:ro
     depends_on:
@@ -83,6 +86,41 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.11.0
+    user: root
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - KIBANA_HOST=http://kibana:5601
+    volumes:
+      - ./filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - /var/log:/hostfs/var/log:ro
+      - /proc:/hostfs/proc:ro
+      - /sys/fs/cgroup:/hostfs/sys/fs/cgroup:ro
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    command: filebeat -e -strict.perms=false
+    networks:
+      - default
+
+  metricbeat:
+    image: docker.elastic.co/beats/metricbeat:8.11.0
+    user: root
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - KIBANA_HOST=http://kibana:5601
+    volumes:
+      - ./metricbeat/metricbeat.yml:/usr/share/metricbeat/metricbeat.yml:ro
+      - /proc:/hostfs/proc:ro
+      - /sys/fs/cgroup:/hostfs/sys/fs/cgroup:ro
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    command: metricbeat -e -strict.perms=false
+    networks:
+      - default
 
   app:
     build: .

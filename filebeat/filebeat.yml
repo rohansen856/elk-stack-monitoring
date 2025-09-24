@@ -1,0 +1,123 @@
+filebeat.inputs:
+# System authentication logs
+- type: log
+  enabled: true
+  paths:
+    - /hostfs/var/log/auth.log
+    - /hostfs/var/log/secure
+    - /hostfs/var/log/messages
+  fields:
+    log_type: system_auth
+    data_stream.namespace: security
+  fields_under_root: true
+  multiline.pattern: '^\w+\s+\d+\s+\d+:\d+:\d+'
+  multiline.negate: true
+  multiline.match: after
+
+# SSH logs for APT detection
+- type: log
+  enabled: true
+  paths:
+    - /hostfs/var/log/sshd.log
+    - /hostfs/var/log/ssh.log
+  fields:
+    log_type: ssh_access
+    data_stream.namespace: security
+  fields_under_root: true
+
+# Sudo/privilege escalation logs
+- type: log
+  enabled: true
+  paths:
+    - /hostfs/var/log/sudo.log
+  fields:
+    log_type: privilege_escalation
+    data_stream.namespace: security
+  fields_under_root: true
+
+# System process logs
+- type: log
+  enabled: true
+  paths:
+    - /hostfs/var/log/syslog
+    - /hostfs/var/log/kern.log
+  fields:
+    log_type: system_process
+    data_stream.namespace: system
+  fields_under_root: true
+
+# Network connection logs (if available)
+- type: log
+  enabled: true
+  paths:
+    - /hostfs/var/log/ufw.log
+    - /hostfs/var/log/iptables.log
+  fields:
+    log_type: network_firewall
+    data_stream.namespace: network
+  fields_under_root: true
+
+# File access monitoring (auditd logs)
+- type: log
+  enabled: true
+  paths:
+    - /hostfs/var/log/audit/audit.log
+  fields:
+    log_type: file_access_audit
+    data_stream.namespace: security
+  fields_under_root: true
+
+# HTTP access logs for web applications
+- type: log
+  enabled: true
+  paths:
+    - /hostfs/var/log/nginx/access.log
+    - /hostfs/var/log/apache2/access.log
+    - /hostfs/var/log/httpd/access_log
+  fields:
+    log_type: web_access
+    data_stream.namespace: web
+  fields_under_root: true
+
+processors:
+- add_host_metadata:
+    when.not.contains.tags: forwarded
+- add_docker_metadata: ~
+- add_kubernetes_metadata: ~
+- timestamp:
+    field: "@timestamp"
+    layouts:
+      - '2006-01-02T15:04:05.000Z'
+      - '2006-01-02T15:04:05Z'
+    test:
+      - '2023-05-26T09:15:00.000Z'
+
+# GeoIP enrichment for IP addresses
+- add_locale:
+    format: offset
+- fingerprint:
+    fields: ["message", "host.name", "log_type"]
+    target_field: "@metadata.fingerprint"
+
+output.elasticsearch:
+  hosts: ["elasticsearch:9200"]
+  index: "security-logs-%{+yyyy.MM.dd}"
+
+setup.kibana:
+  host: "kibana:5601"
+
+setup.dashboards.enabled: true
+setup.template.enabled: true
+setup.template.name: "security-logs"
+setup.template.pattern: "security-logs-*"
+setup.template.settings:
+  index.number_of_shards: 1
+  index.number_of_replicas: 0
+
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: /var/log/filebeat
+  name: filebeat
+  keepfiles: 7
+  permissions: 0644
