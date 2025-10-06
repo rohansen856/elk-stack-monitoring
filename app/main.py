@@ -15,6 +15,7 @@ from app.models.user import User
 from app.models.todo import Todo
 from app.api.users import router as users_router
 from app.api.todos import router as todos_router
+from app.api.security import router as security_router  
 from app.exceptions import (
     TodoAppException,
     todo_app_exception_handler,
@@ -28,8 +29,8 @@ configure_logging()
 logger = structlog.get_logger()
 
 app = FastAPI(
-    title="Todo API",
-    description="A production-grade Todo application API",
+    title="ELK Stack Security Monitoring API",
+    description="A production-grade security monitoring application with ELK stack integration",
     version="1.0.0",
     docs_url="/docs" if settings.environment != "production" else None,
     redoc_url="/redoc" if settings.environment != "production" else None,
@@ -41,6 +42,7 @@ app.add_middleware(MetricsMiddleware)
 
 app.include_router(users_router, prefix="/api/v1/users", tags=["users"])
 app.include_router(todos_router, prefix="/api/v1/todos", tags=["todos"])
+app.include_router(security_router, prefix="/api/v1/security", tags=["security"]) 
 
 # Exception handlers
 app.add_exception_handler(TodoAppException, todo_app_exception_handler)
