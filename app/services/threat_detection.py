@@ -189,5 +189,211 @@ class ThreatDetectionService:
         except Exception as e:
             logger.error("Error in APT correlation", error=str(e))
             return []
+    
+    async def hunt_ecs_powershell_external(self) -> List[Dict]:
+        """Hunt for PowerShell execution from external IPs (ECS format)"""
+        end_time = datetime.utcnow()
+        start_time = end_time - timedelta(hours=24)
+        
+        # The exact query you mentioned
+        query = {
+            "query": {
+                "bool": {
+                    "must": [
+                        {"range": {"@timestamp": {"gte": start_time, "lte": end_time}}},
+                        {"term": {"event.action.keyword": "process_start"}},
+                        {"wildcard": {"process.command_line": "*powershell*"}}
+                    ],
+                    "must_not": [
+                        {"range": {"source.ip": {"gte": "10.0.0.0", "lte": "10.255.255.255"}}},
+                        {"range": {"source.ip": {"gte": "192.168.0.0", "lte": "192.168.255.255"}}},
+                        {"range": {"source.ip": {"gte": "172.16.0.0", "lte": "172.31.255.255"}}}
+                    ]
+                }
+            },
+            "aggs": {
+                "by_host": {
+                    "terms": {"field": "host.name.keyword"},
+                    "aggs": {
+                        "by_source_ip": {
+                            "terms": {"field": "source.ip.keyword"}
+                        },
+                        "by_user": {
+                            "terms": {"field": "user.name.keyword"}
+                        }
+                    }
+                }
+            }
+        }
+        
+        try:
+            result = self.es.search(index="security-*", body=query)
+            threats = []
+            
+            if result['hits']['total']['value'] > 0:
+                threats.append({
+                    "threat_type": "ecs_external_powershell",
+                    "description": "PowerShell execution from external IP detected",
+                    "events_count": result['hits']['total']['value'],
+                    "query_used": "event.action:process_start AND process.command_line:*powershell* AND source.ip:!10.0.0.0/8",
+                    "affected_hosts": len(result.get('aggregations', {}).get('by_host', {}).get('buckets', [])),
+                    "risk_score": 9,
+                    "detected_at": datetime.utcnow().isoformat()
+                })
+            
+            return threats
+        except Exception as e:
+            logger.error("Error in ECS PowerShell hunting", error=str(e))
+            return []
+
+    async def hunt_apt_kill_chain_ecs(self) -> List[Dict]:
+        """Hunt for complete APT kill chain using ECS"""
+        
+        # Step 1: Find PowerShell execution (already implemented)
+        powershell_threats = await self.hunt_ecs_powershell_external()
+        
+        # Step 2: Find C2 traffic
+        end_time = datetime.utcnow()
+        start_time = end_time - timedelta(hours=24)
+        
+        c2_query = {
+            "query": {
+                "bool": {
+                    "must": [
+                        {"range": {"@timestamp": {"gte": start_time, "lte": end_time}}},
+                        {"term": {"event.action.keyword": "network_connection"}},
+                        {"range": {"network.bytes": {"gte": 1024}}},
+                        {"term": {"network.direction.keyword": "outbound"}}
+                    ],
+                    "must_not": [
+                        {"terms": {"destination.ip.keyword": ["127.0.0.1", "::1"]}},
+                        {"range": {"destination.ip": {"gte": "10.0.0.0", "lte": "10.255.255.255"}}}
+                    ]
+                }
+            }
+        }
+        
+        try:
+            c2_result = self.es.search(index="security-*", body=c2_query)
+            
+            # Correlate across both
+            if (powershell_threats and 
+                c2_result['hits']['total']['value'] > 0):
+                
+                return [{
+                    "threat_type": "apt_kill_chain_complete",
+                    "stages": ["execution", "command_and_control"],
+                    "powershell_events": len(powershell_threats),
+                    "c2_connections": c2_result['hits']['total']['value'],
+                    "description": "Complete APT kill chain detected: PowerShell execution + C2 traffic",
+                    "risk_score": 10,
+                    "detected_at": datetime.utcnow().isoformat()
+                }]
+            
+            return []
+        except Exception as e:
+            logger.error("Error in APT kill chain hunting", error=str(e))
+            return []
+
+    async def hunt_lateral_movement_ecs(self) -> List[Dict]:
+        """Hunt for lateral movement using ECS"""
+        end_time = datetime.utcnow()
+        start_time = end_time - timedelta(hours=2)
+        
+        query = {
+            "query": {
+                "bool": {
+                    "must": [
+                        {"range": {"@timestamp": {"gte": start_time, "lte": end_time}}},
+                        {"term": {"event.action.keyword": "authentication_success"}},
+                        {"term": {"logon.type": "3"}}  # Network logon
+                    ]
+                }
+            },
+            "aggs": {
+                "by_user": {
+                    "terms": {"field": "user.name.keyword"},
+                    "aggs": {
+                        "unique_hosts": {
+                            "cardinality": {"field": "host.name.keyword"}
+                        },
+                        "hosts_accessed": {
+                            "terms": {"field": "host.name.keyword", "size": 20}
+                        }
+                    }
+                }
+            }
+        }
+        
+        try:
+            result = self.es.search(index="security-*", body=query)
+            threats = []
+            
+            if 'aggregations' in result:
+                for bucket in result['aggregations']['by_user']['buckets']:
+                    user = bucket['key']
+                    unique_hosts = bucket['unique_hosts']['value']
+                    
+                    # Lateral movement: user accessing 3+ different hosts
+                    if unique_hosts >= 3:
+                        hosts = [h['key'] for h in bucket['hosts_accessed']['buckets']]
+                        threats.append({
+                            "threat_type": "lateral_movement",
+                            "user": user,
+                            "unique_hosts_accessed": unique_hosts,
+                            "hosts": hosts,
+                            "hunt_query": "event.action:authentication_success AND logon.type:3",
+                            "risk_score": min(unique_hosts * 2, 10),
+                            "detected_at": datetime.utcnow().isoformat()
+                        })
+            
+            return threats
+        except Exception as e:
+            logger.error("Error in lateral movement hunting", error=str(e))
+            return []
+
+    async def hunt_privilege_escalation_ecs(self) -> List[Dict]:
+        """Hunt for privilege escalation using ECS"""
+        end_time = datetime.utcnow()
+        start_time = end_time - timedelta(hours=1)
+        
+        query = {
+            "query": {
+                "bool": {
+                    "must": [
+                        {"range": {"@timestamp": {"gte": start_time, "lte": end_time}}}
+                    ],
+                    "should": [
+                        {"wildcard": {"process.command_line": "*runas*"}},
+                        {"wildcard": {"process.command_line": "*sudo*"}},
+                        {"term": {"event.action.keyword": "privilege_use"}},
+                        {"term": {"winlog.event_id": "4672"}}  # Windows special privileges
+                    ]
+                }
+            }
+        }
+        
+        try:
+            result = self.es.search(index="security-*", body=query)
+            threats = []
+            
+            if result['hits']['total']['value'] > 0:
+                for hit in result['hits']['hits']:
+                    source = hit['_source']
+                    threats.append({
+                        "threat_type": "privilege_escalation",
+                        "user": source.get('user', {}).get('name', 'unknown'),
+                        "process": source.get('process', {}).get('name', 'unknown'),
+                        "command_line": source.get('process', {}).get('command_line', ''),
+                        "host": source.get('host', {}).get('name', 'unknown'),
+                        "hunt_query": "process.command_line:*runas* OR process.command_line:*sudo*",
+                        "risk_score": 8,
+                        "detected_at": datetime.utcnow().isoformat()
+                    })
+            
+            return threats
+        except Exception as e:
+            logger.error("Error in privilege escalation hunting", error=str(e))
+            return []
 
 threat_detector = ThreatDetectionService()
