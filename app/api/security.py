@@ -54,3 +54,49 @@ async def detect_apt_correlation():
     """Detect correlated APT indicators"""
     threats = await threat_detector.correlate_apt_indicators()
     return {"threats": threats, "count": len(threats)}
+
+@router.get("/hunt/powershell-external")
+async def hunt_powershell_external():
+    """Hunt for PowerShell execution from external IPs"""
+    threats = await threat_detector.hunt_ecs_powershell_external()
+    return {"threats": threats, "count": len(threats)}
+
+@router.get("/hunt/apt-kill-chain")
+async def hunt_apt_kill_chain():
+    """Hunt for complete APT kill chain"""
+    threats = await threat_detector.hunt_apt_kill_chain_ecs()
+    return {"threats": threats, "count": len(threats)}
+
+@router.get("/hunt/lateral-movement")
+async def hunt_lateral_movement():
+    """Hunt for lateral movement patterns"""
+    threats = await threat_detector.hunt_lateral_movement_ecs()
+    return {"threats": threats, "count": len(threats)}
+
+@router.get("/hunt/privilege-escalation")
+async def hunt_privilege_escalation():
+    """Hunt for privilege escalation attempts"""
+    threats = await threat_detector.hunt_privilege_escalation_ecs()
+    return {"threats": threats, "count": len(threats)}
+
+@router.get("/hunt/comprehensive")
+async def comprehensive_threat_hunt():
+    """Run comprehensive threat hunting across all patterns"""
+    results = {
+        "powershell_external": await threat_detector.hunt_ecs_powershell_external(),
+        "apt_kill_chain": await threat_detector.hunt_apt_kill_chain_ecs(),
+        "lateral_movement": await threat_detector.hunt_lateral_movement_ecs(),
+        "privilege_escalation": await threat_detector.hunt_privilege_escalation_ecs()
+    }
+    
+    total_threats = sum(len(threats) for threats in results.values())
+    
+    return {
+        "total_threats": total_threats,
+        "hunt_results": results,
+        "hunt_queries_used": [
+            "event.action:process_start AND process.command_line:*powershell* AND source.ip:!10.0.0.0/8",
+            "event.action:authentication_success AND logon.type:3",
+            "process.command_line:*runas* OR process.command_line:*sudo*"
+        ]
+    }
