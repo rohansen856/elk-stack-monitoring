@@ -1,6 +1,7 @@
 metricbeat.config.modules:
   path: ${path.config}/modules.d/*.yml
   reload.enabled: false
+  enabled: false
 
 metricbeat.modules:
 # System metrics for APT detection
@@ -10,19 +11,14 @@ metricbeat.modules:
     - load
     - memory
     - network
-    - process
-    - process_summary
-    - socket_summary
     - filesystem
     - fsstat
-    - socket
   enabled: true
-  period: 10s
-  processes: ['.*']
-  cpu.metrics:  [percentages, normalized_percentages]
+  period: 30s
+  cpu.metrics:  [percentages]
   core.metrics: [percentages]
 
-# Docker metrics
+# Docker metrics - disabled due to socket access issues in container
 - module: docker
   metricsets:
     - container
@@ -34,16 +30,16 @@ metricbeat.modules:
     - network
   hosts: ["unix:///var/run/docker.sock"]
   period: 10s
-  enabled: true
+  enabled: false
 
-# Network monitoring for suspicious connections
+# Network monitoring for suspicious connections - disabled due to field complexity
 - module: system
   metricsets: ["socket"]
   socket.reverse_lookup.enabled: true
   socket.reverse_lookup.success_ttl: 60s
   socket.reverse_lookup.failure_ttl: 60s
   period: 30s
-  enabled: true
+  enabled: false
 
 processors:
 - add_host_metadata:
@@ -57,7 +53,7 @@ output.elasticsearch:
 setup.kibana:
   host: "kibana:5601"
 
-setup.dashboards.enabled: true
+setup.dashboards.enabled: false
 setup.template.enabled: true
 setup.template.name: "metricbeat"
 setup.template.pattern: "metricbeat-*"

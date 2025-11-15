@@ -1,0 +1,11 @@
+# Kibana configuration for development environment
+server.host: "0.0.0.0"
+server.shutdownTimeout: "5s"
+elasticsearch.hosts: ["http://elasticsearch:9200"]
+monitoring.ui.container.elasticsearch.enabled: true
+
+# Disable security features for development
+xpack.security.enabled: false
+
+# Enable server info for Beats integration
+server.publicBaseUrl: "http://kibana:5601"

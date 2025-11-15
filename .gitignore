@@ -10,3 +10,5 @@ htmlcov/
 .env
 alembic/versions/
 *.log
+node_modules/
+.next/

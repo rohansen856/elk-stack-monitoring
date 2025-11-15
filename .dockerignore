@@ -12,3 +12,5 @@ README.md
 .env.example
 alembic/versions/
 *.log
+.next
+node_modules/

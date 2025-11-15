@@ -8,7 +8,7 @@ filebeat.inputs:
     - /hostfs/var/log/messages
   fields:
     log_type: system_auth
-    data_stream.namespace: security
+    data_stream.namespace: system
   fields_under_root: true
   multiline.pattern: '^\w+\s+\d+\s+\d+:\d+:\d+'
   multiline.negate: true
@@ -22,7 +22,7 @@ filebeat.inputs:
     - /hostfs/var/log/ssh.log
   fields:
     log_type: ssh_access
-    data_stream.namespace: security
+    data_stream.namespace: system
   fields_under_root: true
 
 # Sudo/privilege escalation logs
@@ -32,7 +32,7 @@ filebeat.inputs:
     - /hostfs/var/log/sudo.log
   fields:
     log_type: privilege_escalation
-    data_stream.namespace: security
+    data_stream.namespace: system
   fields_under_root: true
 
 # System process logs
@@ -64,7 +64,7 @@ filebeat.inputs:
     - /hostfs/var/log/audit/audit.log
   fields:
     log_type: file_access_audit
-    data_stream.namespace: security
+    data_stream.namespace: system
   fields_under_root: true
 
 # HTTP access logs for web applications
@@ -106,7 +106,7 @@ output.elasticsearch:
 setup.kibana:
   host: "kibana:5601"
 
-setup.dashboards.enabled: true
+setup.dashboards.enabled: false
 setup.template.enabled: true
 setup.template.name: "security-logs"
 setup.template.pattern: "security-logs-*"
