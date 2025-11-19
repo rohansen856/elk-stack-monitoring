@@ -28,12 +28,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!isHydrated) {
-      console.log("Not hydrated yet, waiting...")
       return
     }
 
     if (!token) {
-      console.log("No token, redirecting to login")
       router.push("/login")
       return
     }

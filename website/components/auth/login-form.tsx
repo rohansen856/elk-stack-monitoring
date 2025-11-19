@@ -1,28 +1,33 @@
-'use client'
+"use client"
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useAuthStore } from '@/lib/store/auth-store'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { AlertCircle, Loader2 } from 'lucide-react'
+import { useState } from "react"
+import { useRouter } from "next/navigation"
+import { useAuthStore } from "@/lib/store/auth-store"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import { AlertCircle, Loader2 } from "lucide-react"
 
 export function LoginForm() {
   const router = useRouter()
   const { login, isLoading, error, clearError } = useAuthStore()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
       await login(email, password)
-      console.log('Login successful, redirecting...')
-      router.push('/dashboard')
+      router.push("/dashboard")
     } catch (error) {
-      console.error('Login failed:', error)
+      console.error("Login failed:", error)
       // Error is already in the store
     }
   }
@@ -81,15 +86,15 @@ export function LoginForm() {
                 Signing in...
               </>
             ) : (
-              'Sign In'
+              "Sign In"
             )}
           </Button>
 
           <p className="text-center text-sm text-muted-foreground">
-            Don't have an account?{' '}
+            Don't have an account?{" "}
             <button
               type="button"
-              onClick={() => router.push('/register')}
+              onClick={() => router.push("/register")}
               className="text-primary hover:underline font-medium"
             >
               Sign up
