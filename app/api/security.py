@@ -24,6 +24,11 @@ class PrivilegeEscalationSimulation(BaseModel):
     event_action: str = "privilege_use"
     source_ip: str = "127.0.0.1"
 
+class LateralMovementSimulation(BaseModel):
+    user: str
+    hosts: List[str]
+    source_ip: str = "127.0.0.1"
+
 @router.get("/threats/scan")
 async def run_threat_scan(background_tasks: BackgroundTasks):
     """Run comprehensive threat detection scan"""
@@ -164,4 +169,26 @@ async def simulate_privilege_escalation(simulation: PrivilegeEscalationSimulatio
             "event_action": simulation.event_action,
             "source_ip": simulation.source_ip
         }
+    }
+
+@router.post("/simulate/lateral-movement")
+async def simulate_lateral_movement(simulation: LateralMovementSimulation):
+    """Simulate lateral movement across multiple hosts"""
+    events_logged = []
+
+    for host in simulation.hosts:
+        await security_logger.log_lateral_movement_event(
+            user=simulation.user,
+            host=host,
+            source_ip=simulation.source_ip,
+            logon_type=3  # Network logon
+        )
+        events_logged.append(f"{simulation.user} -> {host}")
+
+    return {
+        "status": "success",
+        "message": f"Lateral movement events logged across {len(simulation.hosts)} hosts",
+        "events": events_logged,
+        "user": simulation.user,
+        "source_ip": simulation.source_ip
     }

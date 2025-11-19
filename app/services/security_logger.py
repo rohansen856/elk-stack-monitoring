@@ -343,5 +343,64 @@ class SecurityLogger:
                         error=str(e),
                         command=command[:100])
 
+    async def log_lateral_movement_event(self,
+                                       user: str,
+                                       host: str,
+                                       source_ip: str,
+                                       logon_type: int = 3):
+        """Log lateral movement/network logon events"""
+
+        timestamp = datetime.utcnow()
+
+        event_doc = {
+            "@timestamp": timestamp.isoformat(),
+            "event": {
+                "action": "authentication_success",
+                "category": ["authentication"],
+                "type": ["info"],
+                "outcome": "success",
+                "dataset": "security.lateral"
+            },
+            "user": {
+                "name": user
+            },
+            "host": {
+                "name": host
+            },
+            "source": {
+                "ip": source_ip
+            },
+            "logon": {
+                "type": str(logon_type)  # Type 3 = Network logon
+            },
+            "service": {
+                "name": self.service_name
+            },
+            "message": f"Network logon: {user} -> {host}",
+            "log_category": "lateral_movement",
+            "ecs": {
+                "version": "8.0.0"
+            }
+        }
+
+        try:
+            index_name = f"security-lateral-logs-{timestamp.strftime('%Y.%m.%d')}"
+
+            result = self.es.index(
+                index=index_name,
+                body=event_doc
+            )
+
+            logger.info("Lateral movement event logged",
+                       user=user,
+                       host=host,
+                       index=index_name)
+
+        except Exception as e:
+            logger.error("Failed to log lateral movement event",
+                        error=str(e),
+                        user=user,
+                        host=host)
+
 # Global instance
 security_logger = SecurityLogger()
