@@ -29,6 +29,12 @@ class LateralMovementSimulation(BaseModel):
     hosts: List[str]
     source_ip: str = "127.0.0.1"
 
+class DataExfiltrationSimulation(BaseModel):
+    source_ip: str
+    destination_ip: str
+    bytes_transferred: int
+    direction: str = "outbound"
+
 @router.get("/threats/scan")
 async def run_threat_scan(background_tasks: BackgroundTasks):
     """Run comprehensive threat detection scan"""
@@ -191,4 +197,29 @@ async def simulate_lateral_movement(simulation: LateralMovementSimulation):
         "events": events_logged,
         "user": simulation.user,
         "source_ip": simulation.source_ip
+    }
+
+@router.post("/simulate/data-exfiltration")
+async def simulate_data_exfiltration(simulation: DataExfiltrationSimulation):
+    """Simulate data exfiltration for testing threat detection"""
+    await security_logger.log_network_event(
+        event_type="data_exfiltration",
+        source_ip=simulation.source_ip,
+        destination_ip=simulation.destination_ip,
+        bytes_transferred=simulation.bytes_transferred,
+        direction=simulation.direction
+    )
+
+    mb_transferred = round(simulation.bytes_transferred / (1024 * 1024), 2)
+
+    return {
+        "status": "success",
+        "message": f"Data exfiltration event logged: {mb_transferred} MB transferred",
+        "event": {
+            "source_ip": simulation.source_ip,
+            "destination_ip": simulation.destination_ip,
+            "bytes_transferred": simulation.bytes_transferred,
+            "mb_transferred": mb_transferred,
+            "direction": simulation.direction
+        }
     }
