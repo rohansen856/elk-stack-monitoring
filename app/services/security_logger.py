@@ -282,5 +282,66 @@ class SecurityLogger:
                         error=str(e),
                         event_type=event_type)
 
+    async def log_privilege_escalation_event(self,
+                                        command: str,
+                                        user: str,
+                                        host: str,
+                                        process: str,
+                                        event_action: str = "privilege_use",
+                                        source_ip: Optional[str] = None):
+        """Log privilege escalation events"""
+
+        timestamp = datetime.utcnow()
+
+        event_doc = {
+            "@timestamp": timestamp.isoformat(),
+            "event": {
+                "action": event_action,
+                "category": ["process"],
+                "type": ["start"],
+                "outcome": "success",
+                "dataset": "security.privilege"
+            },
+            "process": {
+                "name": process,
+                "command_line": command
+            },
+            "user": {
+                "name": user
+            },
+            "host": {
+                "name": host
+            },
+            "source": {
+                "ip": source_ip or "127.0.0.1"
+            },
+            "service": {
+                "name": self.service_name
+            },
+            "message": f"Privilege escalation: {command}",
+            "log_category": "privilege_escalation",
+            "ecs": {
+                "version": "8.0.0"
+            }
+        }
+
+        try:
+            index_name = f"security-privilege-logs-{timestamp.strftime('%Y.%m.%d')}"
+
+            result = self.es.index(
+                index=index_name,
+                body=event_doc
+            )
+
+            logger.info("Privilege escalation event logged",
+                       command=command[:100],
+                       user=user,
+                       index=index_name)
+
+        except Exception as e:
+            logger.error("Failed to log privilege escalation event",
+                        error=str(e),
+                        command=command[:100])
+
 # Global instance
 security_logger = SecurityLogger()

@@ -140,3 +140,28 @@ async def simulate_powershell_execution(simulation: PowerShellSimulation):
             "source_ip": simulation.source_ip
         }
     }
+
+@router.post("/simulate/privilege-escalation")
+async def simulate_privilege_escalation(simulation: PrivilegeEscalationSimulation):
+    """Simulate privilege escalation for testing threat detection"""
+    await security_logger.log_privilege_escalation_event(
+        command=simulation.command,
+        user=simulation.user,
+        host=simulation.host,
+        process=simulation.process,
+        event_action=simulation.event_action,
+        source_ip=simulation.source_ip
+    )
+
+    return {
+        "status": "success",
+        "message": f"Privilege escalation event logged for detection testing",
+        "event": {
+            "command": simulation.command,
+            "user": simulation.user,
+            "host": simulation.host,
+            "process": simulation.process,
+            "event_action": simulation.event_action,
+            "source_ip": simulation.source_ip
+        }
+    }
