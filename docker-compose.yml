@@ -142,6 +142,18 @@ services:
     networks:
       - default
 
+  migrate:
+    build: .
+    env_file:
+      - ./.env
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+
   app:
     build: .
     ports:
@@ -149,8 +161,8 @@ services:
     env_file:
       - ./.env
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       elasticsearch:
@@ -169,6 +181,22 @@ services:
         "8000",
         "--reload",
       ]
+
+  frontend:
+    build:
+      context: ./website
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./website/.env
+    depends_on:
+      - app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 volumes:
   postgres_data:
