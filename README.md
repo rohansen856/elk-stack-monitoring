@@ -54,25 +54,33 @@ A comprehensive cybersecurity platform that combines task management with advanc
    ```bash
    docker-compose up -d
    ```
+   > **Note**: Database migrations now run automatically! No manual steps needed.
 
-4. **Initialize database**
+4. **Wait for services to start** (optional verification)
    ```bash
-   docker-compose exec app alembic upgrade head
+   # Check all services are running
+   docker-compose ps
+
+   # Check service health
+   curl http://localhost:8000/health
+   curl http://localhost:9200/_cluster/health
    ```
 
 5. **Access the applications**
-   - **Frontend**: http://localhost:3000
+   - **Frontend Dashboard**: http://localhost:3000
    - **API Documentation**: http://localhost:8000/docs
-   - **Kibana Dashboard**: http://localhost:5601
+   - **Kibana Security Dashboard**: http://localhost:5601
    - **API Health Check**: http://localhost:8000/health
 
 ## 🎯 What's Included
 
 ### Frontend Application
-- **Next.js Dashboard** - Modern, responsive security monitoring interface
+- **Next.js 16 Dashboard** - Modern, responsive security monitoring interface built with TypeScript
+- **Todo Management** - Full-featured task management with priority levels (low/medium/high) and due dates
+- **User Authentication** - Secure registration and login with username and email support
 - **Real-time Updates** - Live threat detection and system status
-- **Todo Management** - Integrated task management for security operations
 - **Analytics Views** - Comprehensive security metrics and visualizations
+- **Responsive Design** - Tailwind CSS and shadcn/ui component library
 
 ### Backend API
 - **FastAPI Framework** - High-performance Python API
@@ -90,12 +98,13 @@ A comprehensive cybersecurity platform that combines task management with advanc
 
 | Component | Technology | Purpose |
 |-----------|------------|---------|
-| **Frontend** | Next.js 14, TypeScript, Tailwind CSS | User interface and dashboards |
-| **Backend** | FastAPI, Python 3.11+ | API server and business logic |
-| **Database** | PostgreSQL, Redis | Data persistence and caching |
+| **Frontend** | Next.js 16, TypeScript, Tailwind CSS, shadcn/ui | User interface and dashboards |
+| **Backend** | FastAPI, Python 3.11+, Pydantic | API server and business logic |
+| **Database** | PostgreSQL, Redis, SQLAlchemy | Data persistence and caching |
 | **Security** | Elasticsearch, Logstash, Kibana | Security monitoring and analytics |
 | **Monitoring** | Filebeat, Metricbeat, Prometheus | System and security metrics |
-| **Deployment** | Docker, Docker Compose | Containerized deployment |
+| **Deployment** | Docker, Docker Compose, Multi-stage builds | Containerized deployment |
+| **State Management** | Zustand, React Hook Form | Frontend state and form handling |
 
 ## 🔒 Security Features
 
@@ -118,10 +127,11 @@ A comprehensive cybersecurity platform that combines task management with advanc
 
 ### For End Users
 1. Open the frontend at http://localhost:3000
-2. Register a new account or login
-3. Explore the security dashboard for real-time threats
-4. Use the todo system for task management
-5. View analytics for security insights
+2. Register a new account with username, email, and password
+3. Login and explore the modern dashboard interface
+4. Use the todo system with priority levels and due dates
+5. Manage tasks with filtering, search, and organization features
+6. View analytics for security insights
 
 ### For Security Teams
 1. Access Kibana at http://localhost:5601
