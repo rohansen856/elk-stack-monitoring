@@ -40,29 +40,36 @@ class ThreatDetectionService:
         try:
             result = self.es.search(index="security-*", body=query)
             threats = []
-            
+
             if 'aggregations' not in result or 'by_src_ip' not in result['aggregations']:
                 logger.info("No aggregation data found for brute force detection")
                 return threats
-            
+
             for bucket in result['aggregations']['by_src_ip']['buckets']:
                 src_ip = bucket['key']
                 events = {e['key']: e['doc_count'] for e in bucket['events']['buckets']}
-                
+
                 failed_count = events.get('authentication_failure', 0)
                 success_count = events.get('authentication_success', 0)
-                
-                # Brute force pattern: 5+ failures followed by success
-                if failed_count >= 5 and success_count >= 1:
+
+                # Brute force patterns:
+                # 1. Multiple failures (5+ failures = suspicious)
+                # 2. Multiple failures followed by success (more dangerous)
+                if failed_count >= 5:
+                    risk_score = min(failed_count, 10)
+                    if success_count >= 1:
+                        risk_score = min(failed_count * 2, 10)  # Higher score if successful
+
                     threats.append({
                         "threat_type": "brute_force_attack",
                         "src_ip": src_ip,
                         "failed_attempts": failed_count,
                         "successful_attempts": success_count,
-                        "risk_score": min(failed_count * 2, 10),
+                        "risk_score": risk_score,
+                        "attack_pattern": "successful_brute_force" if success_count > 0 else "failed_brute_force",
                         "detected_at": datetime.utcnow().isoformat()
                     })
-                    
+
             return threats
             
         except Exception as e:

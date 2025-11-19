@@ -2,10 +2,27 @@ from fastapi import APIRouter, BackgroundTasks
 from typing import List, Dict
 from app.services.threat_detection import threat_detector
 from app.services.alerting import alerting_service
+from app.services.security_logger import security_logger
+from pydantic import BaseModel
 import structlog
 
 logger = structlog.get_logger()
 router = APIRouter()
+
+class PowerShellSimulation(BaseModel):
+    command: str
+    user: str
+    host: str
+    process_id: int
+    source_ip: str = "127.0.0.1"
+
+class PrivilegeEscalationSimulation(BaseModel):
+    command: str
+    user: str
+    host: str
+    process: str
+    event_action: str = "privilege_use"
+    source_ip: str = "127.0.0.1"
 
 @router.get("/threats/scan")
 async def run_threat_scan(background_tasks: BackgroundTasks):
@@ -99,4 +116,27 @@ async def comprehensive_threat_hunt():
             "event.action:authentication_success AND logon.type:3",
             "process.command_line:*runas* OR process.command_line:*sudo*"
         ]
+    }
+
+@router.post("/simulate/powershell")
+async def simulate_powershell_execution(simulation: PowerShellSimulation):
+    """Simulate PowerShell execution for testing threat detection"""
+    await security_logger.log_powershell_event(
+        command=simulation.command,
+        user=simulation.user,
+        host=simulation.host,
+        process_id=simulation.process_id,
+        source_ip=simulation.source_ip
+    )
+
+    return {
+        "status": "success",
+        "message": f"PowerShell event logged for detection testing",
+        "event": {
+            "command": simulation.command,
+            "user": simulation.user,
+            "host": simulation.host,
+            "process_id": simulation.process_id,
+            "source_ip": simulation.source_ip
+        }
     }

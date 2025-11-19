@@ -1,5 +1,5 @@
 from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -7,6 +7,7 @@ from app.schemas.user import UserCreate, UserResponse, UserLogin, Token
 from app.crud.user import get_user_by_email, get_user_by_username, create_user, authenticate_user
 from app.api.auth import create_access_token, get_current_active_user
 from app.config import settings
+from app.services.security_logger import security_logger
 import structlog
 
 logger = structlog.get_logger()
@@ -35,14 +36,36 @@ async def register_user(user: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=Token)
-async def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+async def login_user(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    # Get client IP
+    client_ip = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "unknown")
+
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
+        # Log failed authentication
+        await security_logger.log_authentication_event(
+            event_type="authentication_failure",
+            email=form_data.username,
+            source_ip=client_ip,
+            user_agent=user_agent
+        )
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # Log successful authentication
+    await security_logger.log_authentication_event(
+        event_type="authentication_success",
+        email=user.email,
+        user_id=str(user.id),
+        source_ip=client_ip,
+        user_agent=user_agent
+    )
+
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
     access_token = create_access_token(
         data={"sub": user.email}, expires_delta=access_token_expires
