@@ -79,19 +79,19 @@ services:
       retries: 5
 
   kibana:
-    build:
-      context: ./kibana
-      dockerfile: Dockerfile
+    image: docker.elastic.co/kibana/kibana:8.11.0
     env_file:
       - ./.env
     ports:
       - "5601:5601"
+    volumes:
+      - ./kibana/kibana.yml:/usr/share/kibana/config/kibana.yml:ro
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
       - XPACK_SECURITY_ENABLED=false
       - XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY=a7a6311933d3503b89bc8d0a98d7e6f8d4c5e7f8a9b3c2d1e5f6g7h8i9j0k1l2
       - XPACK_REPORTING_ENCRYPTIONKEY=b8b7412844e4614c9acde1b1ac8ef7g9e5d6f8a9b3c2d1e5f6g7h8i9j0k1l2m3n4
-      - XPACK_SECURITY_ENCRYPTIONKEY=c9c8523955f5725dabe2c2bd9f0g8ha6f7e8g9hacb5e4f3g7h8i9j0k1l2m3n4o5p6
+      - XPACK_SECURITY_ENCRYPTIONKEY=c9c8523955f5725dabe2c2bd9f0g8ha6f7e8c2d1e5f6g7h8i9j0k1l2m3n4o5p6
     depends_on:
       elasticsearch:
         condition: service_healthy

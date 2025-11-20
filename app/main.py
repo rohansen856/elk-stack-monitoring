@@ -30,7 +30,7 @@ configure_logging()
 logger = structlog.get_logger()
 
 app = FastAPI(
-    title="ELK Stack Security Monitoring API",
+    title="Sentinel: ELK Stack Security Monitoring API",
     description="A production-grade security monitoring application with ELK stack integration",
     version="1.0.0",
     docs_url="/docs" if settings.environment != "production" else None,
