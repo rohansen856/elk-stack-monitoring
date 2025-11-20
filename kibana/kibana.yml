@@ -8,4 +8,11 @@ monitoring.ui.container.elasticsearch.enabled: true
 xpack.security.enabled: false
 
 # Enable server info for Beats integration
-server.publicBaseUrl: "http://kibana:5601"
+server.publicBaseUrl: "http://localhost:5601"
+
+# Performance tuning
+server.maxPayload: 1048576
+
+# Logging configuration
+logging.root:
+  level: info
