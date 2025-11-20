@@ -21,6 +21,14 @@ class Settings(BaseSettings):
     logstash_port: int = 5044
     logstash_tcp_port: int = 5000
 
+    # Email Settings
+    email_smtp_server: str
+    email_smtp_port: int
+    email_smtp_username: str
+    email_smtp_password: str
+    email_sender_address: str
+    email_sender_name: str
+
     class Config:
         env_file = ".env"
         extra = "ignore"  # Ignore extra environment variables

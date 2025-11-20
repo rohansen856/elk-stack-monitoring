@@ -8,6 +8,7 @@ __pycache__/
 htmlcov/
 .git/
 .env
+website/.env
 alembic/versions/
 *.log
 node_modules/

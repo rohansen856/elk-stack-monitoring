@@ -13,6 +13,7 @@ from app.cache import cache
 from app.database import engine
 from app.models.user import User
 from app.models.todo import Todo
+from app.models.password_reset import PasswordResetToken
 from app.api.users import router as users_router
 from app.api.todos import router as todos_router
 from app.api.security import router as security_router  

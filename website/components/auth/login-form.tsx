@@ -90,16 +90,26 @@ export function LoginForm() {
             )}
           </Button>
 
-          <p className="text-center text-sm text-muted-foreground">
-            Don't have an account?{" "}
+          <div className="text-center space-y-2">
             <button
               type="button"
-              onClick={() => router.push("/register")}
-              className="text-primary hover:underline font-medium"
+              onClick={() => router.push("/forgot-password")}
+              className="text-sm text-primary hover:underline font-medium"
             >
-              Sign up
+              Forgot your password?
             </button>
-          </p>
+
+            <p className="text-sm text-muted-foreground">
+              Don't have an account?{" "}
+              <button
+                type="button"
+                onClick={() => router.push("/register")}
+                className="text-primary hover:underline font-medium"
+              >
+                Sign up
+              </button>
+            </p>
+          </div>
         </form>
       </CardContent>
     </Card>
