@@ -13,3 +13,4 @@ alembic/versions/
 *.log
 node_modules/
 .next/
+test.db

@@ -5,7 +5,7 @@ elasticsearch.hosts: ["http://elasticsearch:9200"]
 monitoring.ui.container.elasticsearch.enabled: true
 
 # Disable security features for development
-xpack.security.enabled: false
+xpack.security.enabled: true
 
 # Enable server info for Beats integration
 server.publicBaseUrl: "http://localhost:5601"
