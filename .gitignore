@@ -9,7 +9,6 @@ htmlcov/
 .git/
 .env
 website/.env
-alembic/versions/
 *.log
 node_modules/
 .next/
