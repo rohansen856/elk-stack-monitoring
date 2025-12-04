@@ -7,8 +7,10 @@ monitoring.ui.container.elasticsearch.enabled: true
 # Disable security features for development
 xpack.security.enabled: true
 
-# Enable server info for Beats integration
-server.publicBaseUrl: "http://localhost:5601"
+# Reverse proxy configuration
+server.basePath: "/monitoring"
+server.rewriteBasePath: true
+server.publicBaseUrl: "http://localhost/monitoring"
 
 # Performance tuning
 server.maxPayload: 1048576

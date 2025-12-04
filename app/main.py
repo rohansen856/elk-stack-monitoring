@@ -35,6 +35,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs" if settings.environment != "production" else None,
     redoc_url="/redoc" if settings.environment != "production" else None,
+    root_path="/backend",  # Tell FastAPI it's behind a reverse proxy at /backend
 )
 
 add_cors_middleware(app)
