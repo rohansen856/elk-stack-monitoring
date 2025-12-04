@@ -1,10 +1,10 @@
-# Kibana configuration for development environment
+# Kibana configuration for production environment
 server.host: "0.0.0.0"
 server.shutdownTimeout: "5s"
 elasticsearch.hosts: ["http://elasticsearch:9200"]
 monitoring.ui.container.elasticsearch.enabled: true
 
-# Disable security features for development
+# Security features
 xpack.security.enabled: true
 
 # Reverse proxy configuration
@@ -14,7 +14,16 @@ server.publicBaseUrl: "http://localhost/monitoring"
 
 # Performance tuning
 server.maxPayload: 1048576
+server.compression.enabled: true
+
+# Content Security Policy
+csp.strict: true
+csp.warnLegacyBrowsers: false
 
 # Logging configuration
 logging.root:
-  level: info
+  level: warn
+logging.appenders.default:
+  type: console
+  layout:
+    type: pattern

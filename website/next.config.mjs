@@ -9,6 +9,7 @@ const nextConfig = {
   images: {
     formats: ['image/avif', 'image/webp'],
     unoptimized: true,
+    minimumCacheTTL: 60,
   },
   headers: async () => [
     {
@@ -34,6 +35,10 @@ const nextConfig = {
           key: 'Permissions-Policy',
           value: 'geolocation=(), microphone=(), camera=()',
         },
+        {
+          key: 'Strict-Transport-Security',
+          value: 'max-age=31536000; includeSubDomains',
+        },
       ],
     },
     {
@@ -42,6 +47,15 @@ const nextConfig = {
         {
           key: 'Cache-Control',
           value: 'no-store, max-age=0',
+        },
+      ],
+    },
+    {
+      source: '/_next/static/:path*',
+      headers: [
+        {
+          key: 'Cache-Control',
+          value: 'public, max-age=31536000, immutable',
         },
       ],
     },
