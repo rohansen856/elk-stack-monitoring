@@ -46,7 +46,10 @@ services:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
     environment:
       - discovery.type=single-node
-      - xpack.security.enabled=false
+      - xpack.security.enabled=true
+      - xpack.security.http.ssl.enabled=false
+      - xpack.security.transport.ssl.enabled=false
+      - ELASTIC_PASSWORD=elastic123
       - cluster.name=docker-cluster
       - bootstrap.memory_lock=true
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
@@ -66,7 +69,7 @@ services:
       - elasticsearch_data:/usr/share/elasticsearch/data
     healthcheck:
       test:
-        ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+        ["CMD-SHELL", "curl -u elastic:elastic123 -f http://localhost:9200/_cluster/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -75,7 +78,10 @@ services:
     image: docker.elastic.co/logstash/logstash:8.11.0
     environment:
       - "LS_JAVA_OPTS=-Xmx256m -Xms256m"
+      - "XPACK_MONITORING_ENABLED=true"
       - "XPACK_MONITORING_ELASTICSEARCH_HOSTS=http://elasticsearch:9200"
+      - "XPACK_MONITORING_ELASTICSEARCH_USERNAME=elastic"
+      - "XPACK_MONITORING_ELASTICSEARCH_PASSWORD=elastic123"
       - "LOG_LEVEL=info"
     ports:
       - "5044:5044" # Beats input
@@ -99,13 +105,13 @@ services:
     image: docker.elastic.co/kibana/kibana:8.11.0
     env_file:
       - ./.env
-    expose:
-      - "5601"
+    ports:
+      - "5601:5601"
     volumes:
       - ./kibana/kibana.yml:/usr/share/kibana/config/kibana.yml:ro
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-      - XPACK_SECURITY_ENABLED=false
+      - XPACK_SECURITY_ENABLED=true
       - XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY=a7a6311933d3503b89bc8d0a98d7e6f8d4c5e7f8a9b3c2d1e5f6g7h8i9j0k1l2
       - XPACK_REPORTING_ENCRYPTIONKEY=b8b7412844e4614c9acde1b1ac8ef7g9e5d6f8a9b3c2d1e5f6g7h8i9j0k1l2m3n4
       - XPACK_SECURITY_ENCRYPTIONKEY=c9c8523955f5725dabe2c2bd9f0g8ha6f7e8c2d1e5f6g7h8i9j0k1l2m3n4o5p6
@@ -113,10 +119,11 @@ services:
       elasticsearch:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:5601/api/status || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:5601/monitoring/api/status || exit 1"]
       interval: 30s
-      timeout: 10s
-      retries: 5
+      timeout: 20s
+      retries: 10
+      start_period: 90s
 
   filebeat:
     image: docker.elastic.co/beats/filebeat:8.11.0
@@ -173,8 +180,8 @@ services:
 
   app:
     build: .
-    expose:
-      - "8000"
+    ports:
+      - "8000:8000"
     env_file:
       - ./.env
     depends_on:
@@ -203,8 +210,8 @@ services:
     build:
       context: ./website
       dockerfile: Dockerfile
-    expose:
-      - "3000"
+    ports:
+      - "3000:3000"
     env_file:
       - ./website/.env
     depends_on:
