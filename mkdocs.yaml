@@ -116,6 +116,7 @@ nav:
     - Kibana: KIBANA.md
     - Beats Components: BEATS_COMPONENTS.md
   - Security:
+    - Security Credentials: SECURITY_CREDENTIALS.md
     - APT Detection Rules: KIBANA_ESQL_ALERTING_RULES.md
     - APT Simulators: APT_SIMULATORS.md
   - Development:
