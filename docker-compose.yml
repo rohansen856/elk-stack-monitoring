@@ -101,6 +101,85 @@ services:
       timeout: 10s
       retries: 5
 
+  setup-elk:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    env_file:
+      - ./.env
+    environment:
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:-elastic123}
+      - KIBANA_SYSTEM_PASSWORD=${KIBANA_SYSTEM_PASSWORD:-kibana123}
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    volumes:
+      - ./kibana/kibana.yml:/kibana-config/kibana.yml
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        echo '=== ELK Stack Setup ==='
+
+        until curl -s -u "elastic:$${ELASTIC_PASSWORD}" "http://elasticsearch:9200/_cluster/health" > /dev/null; do
+          echo 'Waiting for Elasticsearch...'
+          sleep 5
+        done
+
+        echo '✓ Elasticsearch ready'
+
+        # 1. Set kibana_system password
+        echo 'Setting kibana_system password...'
+        response=$$(curl -s -w '\n%{http_code}' -X POST \
+          -u "elastic:$${ELASTIC_PASSWORD}" \
+          "http://elasticsearch:9200/_security/user/kibana_system/_password" \
+          -H "Content-Type: application/json" \
+          -d "{\"password\":\"$${KIBANA_SYSTEM_PASSWORD}\"}")
+
+        http_code=$$(echo "$$response" | tail -n 1)
+
+        if [ "$$http_code" -eq 200 ]; then
+          echo '✓ kibana_system password set'
+          sed -i "s|elasticsearch.password:.*|elasticsearch.password: \"$${KIBANA_SYSTEM_PASSWORD}\"|g" /kibana-config/kibana.yml 2>/dev/null || true
+        else
+          echo "WARNING: Failed to set password (HTTP $$http_code)"
+        fi
+
+        # 2. Create Filebeat index template
+        echo 'Setting up Filebeat index template...'
+        curl -s -X PUT "http://elasticsearch:9200/_index_template/filebeat" \
+          -u "elastic:$${ELASTIC_PASSWORD}" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "index_patterns": ["filebeat-*", "security-logs*"],
+            "data_stream": {},
+            "priority": 200,
+            "template": {
+              "settings": {
+                "number_of_shards": 1,
+                "number_of_replicas": 0
+              }
+            }
+          }' > /dev/null && echo '✓ Filebeat template created'
+
+        # 3. Create Metricbeat index template
+        echo 'Setting up Metricbeat index template...'
+        curl -s -X PUT "http://elasticsearch:9200/_index_template/metricbeat" \
+          -u "elastic:$${ELASTIC_PASSWORD}" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "index_patterns": ["metricbeat-*"],
+            "data_stream": {},
+            "priority": 200,
+            "template": {
+              "settings": {
+                "number_of_shards": 1,
+                "number_of_replicas": 0
+              }
+            }
+          }' > /dev/null && echo '✓ Metricbeat template created'
+
+        echo '=== Setup complete ==='
+    restart: "no"
+
   kibana:
     image: docker.elastic.co/kibana/kibana:8.11.0
     env_file:
@@ -108,7 +187,7 @@ services:
     ports:
       - "5601:5601"
     volumes:
-      - ./kibana/kibana.yml:/usr/share/kibana/config/kibana.yml:ro
+      - ./kibana/kibana.yml:/usr/share/kibana/config/kibana.yml
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
       - XPACK_SECURITY_ENABLED=true
@@ -116,6 +195,8 @@ services:
       - XPACK_REPORTING_ENCRYPTIONKEY=b8b7412844e4614c9acde1b1ac8ef7g9e5d6f8a9b3c2d1e5f6g7h8i9j0k1l2m3n4
       - XPACK_SECURITY_ENCRYPTIONKEY=c9c8523955f5725dabe2c2bd9f0g8ha6f7e8c2d1e5f6g7h8i9j0k1l2m3n4o5p6
     depends_on:
+      setup-elk:
+        condition: service_completed_successfully
       elasticsearch:
         condition: service_healthy
     healthcheck:
@@ -137,6 +218,8 @@ services:
       - /proc:/hostfs/proc:ro
       - /sys/fs/cgroup:/hostfs/sys/fs/cgroup:ro
     depends_on:
+      setup-elk:
+        condition: service_completed_successfully
       elasticsearch:
         condition: service_healthy
       kibana:
@@ -157,6 +240,8 @@ services:
       - /proc:/hostfs/proc:ro
       - /sys/fs/cgroup:/hostfs/sys/fs/cgroup:ro
     depends_on:
+      setup-elk:
+        condition: service_completed_successfully
       elasticsearch:
         condition: service_healthy
       kibana:

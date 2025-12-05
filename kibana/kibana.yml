@@ -3,7 +3,7 @@ server.host: "0.0.0.0"
 server.shutdownTimeout: "5s"
 elasticsearch.hosts: ["http://elasticsearch:9200"]
 elasticsearch.username: "kibana_system"
-elasticsearch.password: "I6aZ-X3eqk3Ty-5LGNWB"
+elasticsearch.password: "kibana123"
 monitoring.ui.container.elasticsearch.enabled: true
 
 # Security features
