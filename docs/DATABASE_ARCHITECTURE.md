@@ -45,8 +45,8 @@ CREATE TABLE users (
 -- id=2, email="jane@example.com", username="jane_smith"
 ```
 <p align="center">
-  <a href="../assets/images/todo_db_users_schema.png" target="_blank" rel="noopener">
-    <img src="../assets/images/todo_db_users_schema.png" alt="users db schema" style="max-width:100%;height:auto;">
+  <a href="../assets/screenshots/todo_db_users_schema.png" target="_blank" rel="noopener">
+    <img src="../assets/screenshots/todo_db_users_schema.png" alt="users db schema" style="max-width:100%;height:auto;">
   </a>
 </p>
 
@@ -71,8 +71,8 @@ CREATE TABLE todos (
 -- id=2, title="Finish project", owner_id=1, completed=true
 ```
 <p align="center">
-  <a href="../assets/images/todo_db_todos_schema.png" target="_blank" rel="noopener">
-    <img src="../assets/images/todo_db_todos_schema.png" alt="todos db schema" style="max-width:100%;height:auto;">
+  <a href="../assets/screenshots/todo_db_todos_schema.png" target="_blank" rel="noopener">
+    <img src="../assets/screenshots/todo_db_todos_schema.png" alt="todos db schema" style="max-width:100%;height:auto;">
   </a>
 </p>
 

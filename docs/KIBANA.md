@@ -1,8 +1,8 @@
 # Kibana Deep Dive Guide
 
 <p align="center">
-  <a href="../assets/images/kibana_host_details.png" target="_blank" rel="noopener">
-    <img src="../assets/images/kibana_host_details.png" alt="Kibana Host Details" style="max-width:100%;height:auto;">
+  <a href="../assets/screenshots/kibana_host_details.png" target="_blank" rel="noopener">
+    <img src="../assets/screenshots/kibana_host_details.png" alt="Kibana Host Details" style="max-width:100%;height:auto;">
   </a>
 </p>
 
