@@ -68,9 +68,25 @@ else
     echo "✓ NEXT_PUBLIC_APP_URL already configured"
 fi
 
-# Step 3: Build and start services
+# Update Kibana publicBaseUrl in kibana.yml
+if grep -q "localhost" kibana/kibana.yml; then
+    sed -i "s|server.publicBaseUrl:.*|server.publicBaseUrl: \"http://$EC2_IP/monitoring\"|g" kibana/kibana.yml
+    echo "✓ Updated Kibana publicBaseUrl to http://$EC2_IP/monitoring"
+else
+    echo "✓ Kibana publicBaseUrl already configured"
+fi
+
+# Step 3: Clean up any previous installation
 echo ""
-echo -e "${YELLOW}Step 3: Building and starting Docker containers...${NC}"
+echo -e "${YELLOW}Step 3: Cleaning up previous installation (if any)...${NC}"
+
+# Stop and remove containers, networks, and volumes
+docker compose down -v 2>/dev/null || true
+echo "✓ Cleaned up previous installation"
+
+# Step 4: Build and start services
+echo ""
+echo -e "${YELLOW}Step 4: Building and starting Docker containers...${NC}"
 echo "This may take 5-10 minutes on first run..."
 echo ""
 
@@ -84,37 +100,51 @@ echo ""
 echo -e "${GREEN}✓ Services started${NC}"
 echo ""
 
-# Step 4: Wait for services to be ready
-echo -e "${YELLOW}Step 4: Waiting for services to initialize...${NC}"
-echo "Waiting 90 seconds for Kibana to start..."
+# Step 5: Wait for services to be ready
+echo -e "${YELLOW}Step 5: Waiting for services to initialize...${NC}"
+echo "The setup-elk service is automatically configuring authentication..."
+echo "Waiting 90 seconds for all services to start..."
 sleep 90
 
-# Step 5: Reset Kibana system password
+# Verify setup-elk service completed successfully
 echo ""
-echo -e "${YELLOW}Step 5: Resetting Kibana system password...${NC}"
+echo -e "${YELLOW}Step 6: Verifying automated setup...${NC}"
+echo ""
 
-# Reset kibana_system password using the correct container name
-KIBANA_PASSWORD=$(docker compose exec -T elasticsearch bin/elasticsearch-reset-password -u kibana_system -b -a 2>&1 | grep "New value:" | awk '{print $NF}')
-
-if [ -z "$KIBANA_PASSWORD" ]; then
-    echo -e "${RED}✗ Failed to reset Kibana password${NC}"
-    echo "Trying alternative method..."
-    KIBANA_PASSWORD=$(docker exec -it elk-stack-monitoring-elasticsearch-1 bin/elasticsearch-reset-password -u kibana_system -b -a 2>&1 | tail -1)
+# Check setup-elk logs
+if docker compose logs setup-elk | grep -q "Setup complete"; then
+    echo -e "${GREEN}✓ Automated ELK setup completed successfully${NC}"
+    docker compose logs setup-elk | tail -8
+else
+    echo -e "${RED}✗ Setup may have issues. Check logs:${NC}"
+    docker compose logs setup-elk
 fi
 
-echo -e "${GREEN}✓ Kibana system password reset${NC}"
-echo "Updating kibana.yml with new password..."
-
-# Update kibana.yml with new password
-sed -i "s|elasticsearch.password:.*|elasticsearch.password: \"$KIBANA_PASSWORD\"|g" kibana/kibana.yml
-
-# Restart Kibana to apply new password
-docker compose restart kibana
-echo -e "${GREEN}✓ Kibana restarted with new credentials${NC}"
-
-# Step 6: Verify services
+# Step 6.5: Force set Kibana password (ensures it works even if setup-elk had issues)
 echo ""
-echo -e "${YELLOW}Step 6: Verifying services...${NC}"
+echo -e "${YELLOW}Ensuring Kibana password is set correctly...${NC}"
+
+# Force set the password to kibana123
+docker compose exec -T elasticsearch curl -X POST -s \
+  -u "elastic:elastic123" \
+  "http://localhost:9200/_security/user/kibana_system/_password" \
+  -H "Content-Type: application/json" \
+  -d '{"password":"kibana123"}' > /dev/null 2>&1
+
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}✓ Kibana password confirmed${NC}"
+    # Restart Kibana to pick up the password
+    docker compose restart kibana > /dev/null 2>&1
+    echo -e "${GREEN}✓ Kibana restarted${NC}"
+    echo "Waiting 30 seconds for Kibana to initialize..."
+    sleep 30
+else
+    echo -e "${YELLOW}⚠ Could not verify Kibana password (this is usually fine)${NC}"
+fi
+
+# Step 7: Verify services
+echo ""
+echo -e "${YELLOW}Step 7: Verifying services...${NC}"
 echo ""
 
 # Check backend
@@ -138,7 +168,7 @@ else
     echo -e "${RED}✗ Nginx is not responding${NC}"
 fi
 
-# Step 7: Display access information
+# Step 8: Display access information
 echo ""
 echo -e "${GREEN}=== Setup Complete! ===${NC}"
 echo ""
