@@ -13,3 +13,4 @@ website/.env
 node_modules/
 .next/
 test.db
+*.pem

@@ -11,19 +11,19 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       {
-        url: "/ms-icon-70x70.png",
+        url: "/frontend/ms-icon-70x70.png",
         media: "(prefers-color-scheme: light)",
       },
       {
-        url: "/ms-icon-70x70.png",
+        url: "/frontend/ms-icon-70x70.png",
         media: "(prefers-color-scheme: dark)",
       },
       {
-        url: "/icon.svg",
+        url: "/frontend/icon.svg",
         type: "image/svg+xml",
       },
     ],
-    apple: "/apple-icon.png",
+    apple: "/frontend/apple-icon.png",
   },
 }
 
