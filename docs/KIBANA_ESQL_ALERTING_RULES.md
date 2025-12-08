@@ -4,7 +4,60 @@ This document contains **ES|QL queries** that match the actual data field struct
 
 ---
 
-## ✅ **WORKING RULES - Copy & Paste Ready**
+## 🔧 **QUICK START - Before Creating Rules**
+
+### **Step 0: Generate Test Data First!** 🚨
+
+Before creating any rules, you MUST have authentication data in Elasticsearch. The indices will be empty until you generate some events.
+
+**Run APT Simulation Scripts (Complete Test)**
+```bash
+# Generate full attack simulation data
+./scripts/apt-simulations-test/full-attack.sh
+
+# This creates data in ALL security indices:
+# - security-auth-logs-*
+# - security-powershell-logs-*
+# - security-privilege-logs-*
+# - security-lateral-logs-*
+# - security-network-logs-*
+```
+
+**Verify Data Exists:**
+```bash
+# Check if indices were created
+curl -u "elastic:elastic123" "http://localhost:9200/_cat/indices/security-auth-*?v"
+
+# Should show indices with docs.count > 0
+```
+
+---
+
+### **Common Error: "Time field is required"** ❌
+
+**Problem**: After pasting the ES|QL query, you see a red error: "Time field is required."
+
+**Solution**:
+1. Look for the dropdown that says **"Select a field"** below your query
+2. Click it and select **`@timestamp`**
+3. The error will disappear ✅
+
+**Why**: ES|QL rules need to know which field contains the timestamp for the time window. All our security logs use `@timestamp`.
+
+---
+
+## 📋 **Rule Creation Checklist**
+
+For EVERY rule you create:
+- Paste ES|QL query
+- **Select `@timestamp` as time field** ⚠️ (MOST COMMON MISTAKE!)
+- Set time window (5m, 10m, 15m, etc.)
+- Add alert action (optional)
+- Click Save
+
+---
+
+## ✅ **WORKING RULES**
 
 ---
 
@@ -20,7 +73,9 @@ FROM security-auth-logs-*
 | EVAL threat_level = "HIGH", attack_type = "Brute Force"
 ```
 
-### **Time Window**: `5 minutes`
+### **⚠️ IMPORTANT - Time Field Configuration**:
+- **Time Field**: Select `@timestamp` from the dropdown (REQUIRED)
+- **Time Window**: `5 minutes`
 ### **Description**: Detects 3+ failed login attempts from same IP or user (lowered threshold for testing)
 
 ---
@@ -36,7 +91,10 @@ FROM security-auth-logs-*
 | EVAL threat_level = "MEDIUM", attack_type = "High Volume Auth"
 ```
 
-### **Time Window**: `5 minutes`
+### **⚠️ IMPORTANT - Time Field Configuration**:
+- **Time Field**: Select `@timestamp` from the dropdown (REQUIRED)
+- **Time Window**: `5 minutes`
+
 ### **Description**: Detects 10+ authentication attempts from same IP/user combination
 
 ---
@@ -47,14 +105,17 @@ FROM security-auth-logs-*
 ### **ES|QL Query**:
 ```sql
 FROM security-powershell-logs-*
-| WHERE event.action == "powershell_execute"
+| WHERE event.action == "process_start"
 | WHERE process.command_line RLIKE ".*(-enc|-EncodedCommand|base64).*"
 | STATS attack_count = COUNT(*) BY source.ip, user.name
 | WHERE attack_count >= 1
 | EVAL threat_level = "CRITICAL", attack_type = "PowerShell LOLBINS"
 ```
 
-### **Time Window**: `2 minutes`
+### **⚠️ IMPORTANT - Time Field Configuration**:
+- **Time Field**: Select `@timestamp` from the dropdown (REQUIRED)
+- **Time Window**: `2 minutes`
+
 ### **Description**: Detects any encoded PowerShell execution
 
 ---
@@ -65,14 +126,17 @@ FROM security-powershell-logs-*
 ### **ES|QL Query**:
 ```sql
 FROM security-privilege-logs-*
-| WHERE event.action == "privilege_use" AND event.outcome == "failure"
+| WHERE event.action == "privilege_use"
 | STATS escalation_attempts = COUNT(*) BY user.name, host.name
-| WHERE escalation_attempts >= 2
+| WHERE escalation_attempts >= 1
 | EVAL threat_level = "HIGH", attack_type = "Privilege Escalation"
 ```
 
-### **Time Window**: `5 minutes`
-### **Description**: Detects 2+ failed privilege escalation attempts
+### **⚠️ IMPORTANT - Time Field Configuration**:
+- **Time Field**: Select `@timestamp` from the dropdown (REQUIRED)
+- **Time Window**: `5 minutes`
+
+### **Description**: Detects privilege escalation attempts (lowered threshold for testing)
 
 ---
 
@@ -88,7 +152,10 @@ FROM security-lateral-logs-*
 | EVAL threat_level = "HIGH", attack_type = "Lateral Movement"
 ```
 
-### **Time Window**: `15 minutes`
+### **⚠️ IMPORTANT - Time Field Configuration**:
+- **Time Field**: Select `@timestamp` from the dropdown (REQUIRED)
+- **Time Window**: `15 minutes`
+
 ### **Description**: Detects successful authentication to 2+ different hosts from same source
 
 ---
@@ -106,7 +173,10 @@ FROM security-network-logs-*
 | EVAL threat_level = "MEDIUM", attack_type = "Large Data Transfer"
 ```
 
-### **Time Window**: `10 minutes`
+### **⚠️ IMPORTANT - Time Field Configuration**:
+- **Time Field**: Select `@timestamp` from the dropdown (REQUIRED)
+- **Time Window**: `10 minutes`
+
 ### **Description**: Detects large data transfers (>5MB total)
 
 ---
@@ -123,27 +193,31 @@ FROM security-auth-logs-*
 | EVAL threat_level = "MEDIUM", attack_type = "High Frequency Auth"
 ```
 
-### **Time Window**: `5 minutes`
+### **⚠️ IMPORTANT - Time Field Configuration**:
+- **Time Field**: Select `@timestamp` from the dropdown (REQUIRED)
+- **Time Window**: `5 minutes`
 ### **Description**: Detects 20+ authentication attempts from single IP
 
 ---
 
-## 🔥 **8. SECURITY ALERTS CORRELATION** ✅
+## 🔥 **8. SECURITY ALERTS CORRELATION** ⚠️
 
 ### **Rule Name**: `Multiple Security Event Types`
 ### **ES|QL Query**:
 ```sql
-FROM security-alerts-*
+FROM security-auth-logs-*, security-powershell-logs-*, security-network-logs-*
 | STATS
-    alert_types = COUNT_DISTINCT(threat_details.threat_type),
-    total_alerts = COUNT(*)
-    BY threat_details.src_ip
-| WHERE alert_types >= 2 OR total_alerts >= 3
-| EVAL threat_level = "HIGH", attack_type = "Multi-Vector Attack"
+    unique_actions = COUNT_DISTINCT(event.action),
+    total_events = COUNT(*)
+    BY source.ip
+| WHERE unique_actions >= 2 OR total_events >= 15
+| EVAL threat_level = "HIGH", attack_type = "Multi-Vector Activity"
 ```
 
-### **Time Window**: `30 minutes`
-### **Description**: Detects multiple alert types or high volume from same source
+### **⚠️ IMPORTANT - Time Field Configuration**:
+- **Time Field**: Select `@timestamp` from the dropdown (REQUIRED)
+- **Time Window**: `30 minutes`
+### **Description**: Detects multiple alert types or high volume from same source (Option 1) OR detects activity across multiple security indices (Option 2)
 
 ---
 
@@ -162,7 +236,9 @@ FROM security-auth-logs-*
 | EVAL threat_level = "MEDIUM", attack_type = "Suspicious IP Behavior"
 ```
 
-### **Time Window**: `15 minutes`
+### **⚠️ IMPORTANT - Time Field Configuration**:
+- **Time Field**: Select `@timestamp` from the dropdown (REQUIRED)
+- **Time Window**: `15 minutes`
 ### **Description**: Detects IPs with suspicious patterns (many users, actions, or events)
 
 ---
@@ -187,7 +263,9 @@ FROM security-auth-logs-*, security-powershell-logs-*, security-privilege-logs-*
 | EVAL threat_level = "CRITICAL", attack_type = "Multi-Stage APT"
 ```
 
-### **Time Window**: `30 minutes`
+### **⚠️ IMPORTANT - Time Field Configuration**:
+- **Time Field**: Select `@timestamp` from the dropdown (REQUIRED)
+- **Time Window**: `30 minutes`
 ### **Description**: Detects 3+ different attack stages from same source IP
 
 ---
@@ -247,12 +325,16 @@ FROM security-auth-logs-*, security-powershell-logs-*, security-privilege-logs-*
    FROM security-auth-logs-* | WHERE event.action == "authentication_failure" | LIMIT 10
    ```
 
-3. **Create Rule**:
-   - Go to Stack Management > Rules
-   - Create rule > Elasticsearch query
-   - Select ES|QL tab
-   - Copy-paste any query above
-   - Set time field to `@timestamp`
+3. **Create Rule** - Step-by-Step:
+   - Go to **Stack Management > Rules**
+   - Click **Create rule**
+   - Select **Elasticsearch query**
+   - Click **ES|QL** tab
+   - Paste query in the text area
+   - **⚠️ CRITICAL**: In "Select a time field" dropdown, choose **`@timestamp`** (this field is REQUIRED!)
+   - Set time window (e.g., "5 minutes")
+   - Configure actions (email, webhook, etc.)
+   - Click **Save**
 
 ---
 

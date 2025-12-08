@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     elasticsearch_url: Optional[str] = None
     elasticsearch_host: str = "elasticsearch"
     elasticsearch_port: int = 9200
+    elasticsearch_password: str = "elastic123"
     kibana_host: str = "kibana"
     kibana_port: int = 5601
     logstash_host: str = "logstash"

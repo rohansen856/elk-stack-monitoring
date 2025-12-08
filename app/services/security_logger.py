@@ -10,7 +10,11 @@ logger = structlog.get_logger()
 
 class SecurityLogger:
     def __init__(self):
-        self.es = Elasticsearch([f"http://{settings.elasticsearch_host}:{settings.elasticsearch_port}"])
+        # Connect to Elasticsearch with authentication (required since xpack.security.enabled=true)
+        self.es = Elasticsearch(
+            [f"http://{settings.elasticsearch_host}:{settings.elasticsearch_port}"],
+            basic_auth=("elastic", settings.elasticsearch_password)
+        )
         self.hostname = socket.gethostname()
         self.service_name = "threat-detection-api"
 

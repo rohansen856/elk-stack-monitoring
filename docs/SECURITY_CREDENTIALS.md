@@ -154,6 +154,18 @@ If you see authentication errors:
 2. Check Elasticsearch is accessible: `curl -u elastic:elastic123 http://localhost:9200`
 3. Restart the affected service: `docker compose restart [service]`
 
+### Elaticsearch auth issue
+
+If you see a authentication error like this multiple times:
+```bash
+elasticsearch-1  | {"@timestamp":"2025-12-07T17:50:19.665Z", "log.level": "INFO", "message":"Authentication of [kibana_system] was terminated by realm [reserved] - failed to authenticate user [kibana_system]", "ecs.version": "1.2.0","service.name":"ES_ECS","event.dataset":"elasticsearch.server","process.thread.name":"elasticsearch[b03b3ca6798f][system_critical_read][T#3]","log.logger":"org.elasticsearch.xpack.security.authc.RealmsAuthenticator","trace.id":"7a4e193c93a685adfe52ae485c5c6c04","elasticsearch.cluster.uuid":"iwZtlhMoTUGOTn9jAivD4Q","elasticsearch.node.id":"K1T-Ik1wTyWsUZ2eHWGNbQ","elasticsearch.node.name":"b03b3ca6798f","elasticsearch.cluster.name":"docker-cluster"}
+```
+
+Just run the following to set the correct password:
+```bash
+docker compose exec -T elasticsearch curl -X POST -s -u "elastic:elastic123" "http://localhost:9200/_security/user/kibana_system/_password" -H "Content-Type: application/json" -d '{"password":"kibana123"}'
+```
+
 ### Kibana "Unable to retrieve version" Error
 
 If Kibana can't connect:
