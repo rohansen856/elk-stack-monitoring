@@ -77,16 +77,19 @@ for i in "${!powershell_attacks[@]}"; do
     echo "    User: $attacker"
     echo "    Command: ${command:0:50}..."
 
-    # Send to simulation API
-    response=$(curl -s -X POST "$API_BASE/api/v1/security/simulate/powershell" \
-        -H "Content-Type: application/json" \
-        -d "{
-            \"command\": \"$command\",
-            \"user\": \"$attacker\",
-            \"host\": \"$host\",
-            \"process_id\": $process_id,
-            \"source_ip\": \"$source_ip\"
-        }")
+    # Send to simulation API - use python to create proper JSON with raw string
+    response=$(python3 <<EOF | curl -s -X POST "$API_BASE/api/v1/security/simulate/powershell" -H "Content-Type: application/json" -d @-
+import json
+data = {
+    'command': r'''$command''',
+    'user': '$attacker',
+    'host': '$host',
+    'process_id': $process_id,
+    'source_ip': '$source_ip'
+}
+print(json.dumps(data))
+EOF
+)
 
     if echo "$response" | grep -q "success"; then
         echo "    ✅ Event logged successfully"
