@@ -251,6 +251,44 @@ services:
     networks:
       - default
 
+  packetbeat:
+    image: docker.elastic.co/beats/packetbeat:8.11.0
+    container_name: packetbeat
+    user: root
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    network_mode: host  # IMPORTANT: Must use host network to capture traffic
+    volumes:
+      - ./packetbeat/packetbeat.yml:/usr/share/packetbeat/packetbeat.yml:ro
+      - /var/log/packetbeat:/var/log/packetbeat
+      - packetbeat-data:/usr/share/packetbeat/data
+    depends_on:
+      setup-elk:
+        condition: service_completed_successfully
+      elasticsearch:
+        condition: service_healthy
+      kibana:
+        condition: service_healthy
+    environment:
+      - ELASTICSEARCH_HOSTS=http://localhost:9200
+      - ELASTICSEARCH_USERNAME=elastic
+      - ELASTICSEARCH_PASSWORD=elastic123
+      - LOGSTASH_HOSTS=localhost:5044
+    command: >
+      packetbeat
+        -e
+        --strict.perms=false
+        -c /usr/share/packetbeat/packetbeat.yml
+    restart: unless-stopped
+    depends_on:
+      - logstash
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   migrate:
     build: .
     env_file:
@@ -311,3 +349,4 @@ volumes:
   postgres_data:
   redis_data:
   elasticsearch_data:
+  packetbeat-data:

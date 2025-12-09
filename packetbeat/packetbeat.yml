@@ -1,0 +1,130 @@
+# ===================================================================
+# Packetbeat Configuration - Monitor Browser Traffic
+# ===================================================================
+# Captures real network traffic from browser and sends to ELK stack
+# When you browse to malicious IPs, alerts will be triggered
+# ===================================================================
+
+packetbeat.interfaces.device: any
+
+# ===================================================================
+# PROTOCOLS TO MONITOR
+# ===================================================================
+
+# HTTP Traffic (port 80, 8080, etc.)
+packetbeat.protocols.http:
+  ports: [80, 8080, 8002, 5000, 9200]
+  send_request: true
+  send_response: true
+  real_ip_header: "X-Forwarded-For"
+
+# HTTPS Traffic (port 443)
+packetbeat.protocols.tls:
+  ports: [443, 8443, 5601]
+  send_certificates: true
+
+# DNS Queries
+packetbeat.protocols.dns:
+  ports: [53]
+  include_authorities: true
+  include_additionals: true
+
+# ===================================================================
+# DATA PROCESSORS
+# ===================================================================
+
+processors:
+  # Add host metadata
+  - add_host_metadata:
+      when.not.contains.tags: forwarded
+      netinfo.enabled: true
+      cache.ttl: 5m
+      geo:
+        name: workstation
+        location: "0.0, 0.0"
+
+  # Add cloud metadata (if running in cloud)
+  - add_cloud_metadata: ~
+
+  # Add custom fields for tracking
+  - add_fields:
+      target: ''
+      fields:
+        event_type: network_connection
+        source_system: workstation
+        monitored_by: packetbeat
+
+  # Drop internal ELK traffic to avoid loops
+  - drop_event:
+      when:
+        or:
+          - equals:
+              destination.port: 9200
+          - equals:
+              destination.port: 5601
+          - equals:
+              source.port: 9200
+          - equals:
+              source.port: 5601
+          - contains:
+              destination.ip: "127.0.0.1"
+          - contains:
+              source.ip: "127.0.0.1"
+
+# ===================================================================
+# OUTPUT TO LOGSTASH (for threat intelligence enrichment)
+# ===================================================================
+
+output.logstash:
+  hosts: ["localhost:5044"]
+
+  # Enable pipelining for better performance
+  pipelining: 2
+
+  # Bulk settings
+  bulk_max_size: 2048
+
+  # Compression
+  compression_level: 3
+
+  # Timeout
+  timeout: 30
+
+# Alternative: Output directly to Elasticsearch (skip Logstash enrichment)
+# output.elasticsearch:
+#   hosts: ["localhost:9200"]
+#   username: "elastic"
+#   password: "elastic123"
+#   index: "packetbeat-workstation-%{+yyyy.MM.dd}"
+
+# ===================================================================
+# LOGGING
+# ===================================================================
+
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: /var/log/packetbeat
+  name: packetbeat
+  keepfiles: 7
+  permissions: 0644
+  rotateeverybytes: 10485760 # 10MB
+
+logging.metrics.enabled: true
+logging.metrics.period: 30s
+
+# ===================================================================
+# MONITORING
+# ===================================================================
+
+monitoring.enabled: false
+
+# ===================================================================
+# SECURITY
+# ===================================================================
+
+# Setup security if using Elasticsearch output with SSL
+# setup.ilm.enabled: false
+# setup.template.enabled: true
+# setup.template.name: "packetbeat-workstation"
+# setup.template.pattern: "packetbeat-workstation-*"
