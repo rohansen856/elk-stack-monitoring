@@ -1,0 +1,64 @@
+# Module: threatintel
+# Docs: https://www.elastic.co/guide/en/beats/filebeat/current/filebeat-module-threatintel.html
+
+- module: threatintel
+
+  # AbuseCH Threat Feed - Malware hashes, IPs, domains
+  # Updates: Real-time
+  # Source: https://abuse.ch
+  abusech:
+    enabled: true
+    var.input: httpjson
+    var.url: "https://urlhaus.abuse.ch/downloads/csv_recent/"
+    var.interval: 30m
+
+  # AbuseCH MalwareBazaar - File hashes
+  abusech.malwarebazaar:
+    enabled: true
+    var.input: httpjson
+    var.url: "https://mb-api.abuse.ch/api/v1/"
+    var.interval: 30m
+
+  # Anomali ThreatStream (Limo) - Free threat intel
+  # Updates: Daily
+  anomali:
+    enabled: true
+    var.input: httpjson
+    var.url: "https://limo.anomali.com/api/v1/taxii2/feeds/collections/"
+    var.interval: 6h
+
+  # AlienVault OTX (Open Threat Exchange)
+  # Requires API key (free)
+  # Register at: https://otx.alienvault.com
+  otx:
+    enabled: true
+    var.api_token: "${ALIENVAULT_OTX_API_KEY}"
+    var.interval: 30m
+    var.types:
+      - "domain"
+      - "IPv4"
+      - "IPv6"
+      - "hostname"
+      - "url"
+      - "FileHash-MD5"
+      - "FileHash-SHA1"
+      - "FileHash-SHA256"
+      - "CVE"
+      - "email"
+      - "Mutex"
+      - "CIDR"
+
+  # MISP (Malware Information Sharing Platform)
+  # Open-source threat intel platform
+  misp:
+    enabled: false  # Enable if you have MISP server
+    var.input: httpjson
+    var.url: "${MISP_URL:http://localhost}"
+    var.api_token: "${MISP_API_KEY:}"
+    var.interval: 6h
+
+  # Recorded Future (Commercial, but has free tier)
+  recordedfuture:
+    enabled: false  # Enable if you have Recorded Future license
+    var.api_token: "${RECORDED_FUTURE_API_KEY:}"
+    var.interval: 24h

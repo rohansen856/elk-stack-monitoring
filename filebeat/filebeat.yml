@@ -125,3 +125,37 @@ logging.files:
   name: filebeat
   keepfiles: 7
   permissions: 0644
+
+# ===================================================================
+# THREAT INTELLIGENCE MODULE
+# ===================================================================
+# Load threat intel module from modules.d/threatintel.yml
+filebeat.config.modules:
+  path: ${path.config}/modules.d/*.yml
+  reload.enabled: true
+  reload.period: 10s
+
+# Threat Intel Processors
+processors:
+  - add_host_metadata:
+      when.not.contains.tags: forwarded
+  - add_cloud_metadata: ~
+  - add_docker_metadata: ~
+  - add_kubernetes_metadata: ~
+  
+  # Threat Intel Enrichment
+  - script:
+      lang: javascript
+      source: >
+        function process(event) {
+          // Mark suspicious IPs for enrichment
+          var src_ip = event.Get("source.ip");
+          var dst_ip = event.Get("destination.ip");
+          
+          if (src_ip || dst_ip) {
+            event.Put("threat.indicator.ip", src_ip || dst_ip);
+            event.Put("needs_threat_check", true);
+          }
+          
+          return event;
+        }
