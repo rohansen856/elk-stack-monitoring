@@ -12,6 +12,19 @@ logger = structlog.get_logger()
 router = APIRouter()
 
 
+async def _invalidate_user_caches(user_id: int, todo_id: int | None = None) -> None:
+    """Drop every cache entry affected by a mutation of this user's todos.
+
+    The stats key was previously never invalidated by create, update or delete,
+    so `/stats/summary` served counts up to 120s stale - reproduced during the
+    audit as total_todos=1 while the user actually had 2. See AUDIT BUG-001.
+    """
+    if todo_id is not None:
+        await cache.delete(f"todo:{todo_id}:user:{user_id}")
+    await cache.delete_pattern(f"todos:user:{user_id}:*")
+    await cache.delete(f"stats:user:{user_id}")
+
+
 @router.get("/", response_model=List[TodoResponse])
 async def read_todos(
     completed: bool = Query(None, description="Filter by completion status"),
@@ -38,9 +51,9 @@ async def read_todos(
     )
 
     todos = get_todos(db=db, user_id=current_user.id, filters=filters)
-    todo_responses = [TodoResponse.from_orm(todo) for todo in todos]
+    todo_responses = [TodoResponse.model_validate(todo) for todo in todos]
 
-    await cache.set(cache_key, [todo.dict() for todo in todo_responses], expire=60)
+    await cache.set(cache_key, [todo.model_dump() for todo in todo_responses], expire=60)
     logger.info("Todos retrieved", user_id=current_user.id, count=len(todos))
 
     return todo_responses
@@ -54,10 +67,10 @@ async def create_new_todo(
 ):
     db_todo = create_todo(db=db, todo=todo, user_id=current_user.id)
 
-    await cache.delete_pattern(f"todos:user:{current_user.id}:*")
+    await _invalidate_user_caches(current_user.id)
     logger.info("Todo created", user_id=current_user.id, todo_id=db_todo.id)
 
-    return TodoResponse.from_orm(db_todo)
+    return TodoResponse.model_validate(db_todo)
 
 
 @router.get("/{todo_id}", response_model=TodoResponse)
@@ -77,8 +90,8 @@ async def read_todo(
     if db_todo is None:
         raise HTTPException(status_code=404, detail="Todo not found")
 
-    todo_response = TodoResponse.from_orm(db_todo)
-    await cache.set(cache_key, todo_response.dict(), expire=300)
+    todo_response = TodoResponse.model_validate(db_todo)
+    await cache.set(cache_key, todo_response.model_dump(), expire=300)
 
     return todo_response
 
@@ -94,11 +107,10 @@ async def update_existing_todo(
     if db_todo is None:
         raise HTTPException(status_code=404, detail="Todo not found")
 
-    await cache.delete(f"todo:{todo_id}:user:{current_user.id}")
-    await cache.delete_pattern(f"todos:user:{current_user.id}:*")
+    await _invalidate_user_caches(current_user.id, todo_id=todo_id)
     logger.info("Todo updated", user_id=current_user.id, todo_id=todo_id)
 
-    return TodoResponse.from_orm(db_todo)
+    return TodoResponse.model_validate(db_todo)
 
 
 @router.delete("/{todo_id}")
@@ -111,8 +123,7 @@ async def delete_existing_todo(
     if not success:
         raise HTTPException(status_code=404, detail="Todo not found")
 
-    await cache.delete(f"todo:{todo_id}:user:{current_user.id}")
-    await cache.delete_pattern(f"todos:user:{current_user.id}:*")
+    await _invalidate_user_caches(current_user.id, todo_id=todo_id)
     logger.info("Todo deleted", user_id=current_user.id, todo_id=todo_id)
 
     return {"message": "Todo deleted successfully"}
