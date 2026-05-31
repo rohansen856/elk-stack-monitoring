@@ -1,16 +1,40 @@
+# Python
 venv/
+.venv/
+.venv-*/
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .coverage
+coverage.xml
 htmlcov/
-.git/
+
+# Secrets and local state - never commit
 .env
+.env.*
+!.env.example
 website/.env
-*.log
+website/.env.*
+!website/.env.example
+*.pem
+*.key
+*.crt
+nginx/certs/
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Node / Next.js
 node_modules/
 .next/
-test.db
-*.pem
+*.tsbuildinfo
+
+# Logs and editor cruft
+*.log
+.DS_Store
