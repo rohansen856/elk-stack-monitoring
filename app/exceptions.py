@@ -1,4 +1,4 @@
-from fastapi import HTTPException, Request
+from fastapi import Request
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import SQLAlchemyError
@@ -67,16 +67,36 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     )
 
 
+def _sanitize_validation_errors(errors):
+    """Strip the rejected value from pydantic's error payload.
+
+    pydantic v2 includes an `input` key echoing whatever was submitted. That
+    payload is both returned to the caller and shipped to Logstash, so a
+    type-invalid password, OTP or new_password ended up in Elasticsearch in
+    cleartext. Location and message are kept; the value is not.
+    See AUDIT SEC-015.
+    """
+    sanitized = []
+    for err in errors:
+        sanitized.append({
+            "type": err.get("type"),
+            "loc": err.get("loc"),
+            "msg": err.get("msg"),
+        })
+    return sanitized
+
+
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    safe_errors = _sanitize_validation_errors(exc.errors())
     logger.error(
         "Validation error",
-        errors=exc.errors(),
+        errors=safe_errors,
         path=request.url.path,
         method=request.method
     )
     return JSONResponse(
         status_code=422,
-        content={"detail": exc.errors(), "type": "validation_error"}
+        content={"detail": safe_errors, "type": "validation_error"}
     )
 
 
