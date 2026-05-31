@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text, Index
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -18,3 +18,8 @@ class Todo(Base):
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
     owner = relationship("User", back_populates="todos")
+
+
+# The list endpoint filters on owner_id and orders by created_at desc;
+# single-column indexes could not serve that combination (AUDIT P6).
+Index("ix_todos_owner_created", Todo.owner_id, Todo.created_at.desc())
