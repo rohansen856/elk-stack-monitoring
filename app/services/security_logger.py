@@ -1,9 +1,7 @@
-from elasticsearch import Elasticsearch
 from datetime import datetime
 import structlog
-import json
 from typing import Dict, Any, Optional
-from app.config import settings
+from app.services.es_client import get_elasticsearch
 import socket
 
 logger = structlog.get_logger()
@@ -11,10 +9,7 @@ logger = structlog.get_logger()
 class SecurityLogger:
     def __init__(self):
         # Connect to Elasticsearch with authentication (required since xpack.security.enabled=true)
-        self.es = Elasticsearch(
-            [f"http://{settings.elasticsearch_host}:{settings.elasticsearch_port}"],
-            basic_auth=("elastic", settings.elasticsearch_password)
-        )
+        self.es = get_elasticsearch()
         self.hostname = socket.gethostname()
         self.service_name = "threat-detection-api"
 
@@ -71,10 +66,17 @@ class SecurityLogger:
             # Index to security-auth-logs with date-based index
             index_name = f"security-auth-logs-{timestamp.strftime('%Y.%m.%d')}"
 
-            result = self.es.index(
+            result = await self.es.index(
                 index=index_name,
                 body=event_doc
             )
+            # Elasticsearch reports per-document outcomes in the response;
+            # the result was previously discarded, so a rejected write still
+            # looked like a success to the caller.
+            if result.get("result") not in ("created", "updated"):
+                raise RuntimeError(
+                    f"Elasticsearch rejected the document: {result.get('result')!r}"
+                )
 
             logger.info("Security event logged",
                        event_type=event_type,
@@ -153,10 +155,17 @@ class SecurityLogger:
             # Index to security-api-logs with date-based index
             index_name = f"security-api-logs-{timestamp.strftime('%Y.%m.%d')}"
 
-            result = self.es.index(
+            result = await self.es.index(
                 index=index_name,
                 body=event_doc
             )
+            # Elasticsearch reports per-document outcomes in the response;
+            # the result was previously discarded, so a rejected write still
+            # looked like a success to the caller.
+            if result.get("result") not in ("created", "updated"):
+                raise RuntimeError(
+                    f"Elasticsearch rejected the document: {result.get('result')!r}"
+                )
 
         except Exception as e:
             logger.error("Failed to log API access event",
@@ -210,10 +219,17 @@ class SecurityLogger:
         try:
             index_name = f"security-powershell-logs-{timestamp.strftime('%Y.%m.%d')}"
 
-            result = self.es.index(
+            result = await self.es.index(
                 index=index_name,
                 body=event_doc
             )
+            # Elasticsearch reports per-document outcomes in the response;
+            # the result was previously discarded, so a rejected write still
+            # looked like a success to the caller.
+            if result.get("result") not in ("created", "updated"):
+                raise RuntimeError(
+                    f"Elasticsearch rejected the document: {result.get('result')!r}"
+                )
 
             logger.info("PowerShell event logged",
                        command=command[:100],
@@ -276,10 +292,17 @@ class SecurityLogger:
         try:
             index_name = f"security-network-logs-{timestamp.strftime('%Y.%m.%d')}"
 
-            result = self.es.index(
+            result = await self.es.index(
                 index=index_name,
                 body=event_doc
             )
+            # Elasticsearch reports per-document outcomes in the response;
+            # the result was previously discarded, so a rejected write still
+            # looked like a success to the caller.
+            if result.get("result") not in ("created", "updated"):
+                raise RuntimeError(
+                    f"Elasticsearch rejected the document: {result.get('result')!r}"
+                )
 
         except Exception as e:
             logger.error("Failed to log network event",
@@ -332,10 +355,17 @@ class SecurityLogger:
         try:
             index_name = f"security-privilege-logs-{timestamp.strftime('%Y.%m.%d')}"
 
-            result = self.es.index(
+            result = await self.es.index(
                 index=index_name,
                 body=event_doc
             )
+            # Elasticsearch reports per-document outcomes in the response;
+            # the result was previously discarded, so a rejected write still
+            # looked like a success to the caller.
+            if result.get("result") not in ("created", "updated"):
+                raise RuntimeError(
+                    f"Elasticsearch rejected the document: {result.get('result')!r}"
+                )
 
             logger.info("Privilege escalation event logged",
                        command=command[:100],
@@ -390,10 +420,17 @@ class SecurityLogger:
         try:
             index_name = f"security-lateral-logs-{timestamp.strftime('%Y.%m.%d')}"
 
-            result = self.es.index(
+            result = await self.es.index(
                 index=index_name,
                 body=event_doc
             )
+            # Elasticsearch reports per-document outcomes in the response;
+            # the result was previously discarded, so a rejected write still
+            # looked like a success to the caller.
+            if result.get("result") not in ("created", "updated"):
+                raise RuntimeError(
+                    f"Elasticsearch rejected the document: {result.get('result')!r}"
+                )
 
             logger.info("Lateral movement event logged",
                        user=user,
