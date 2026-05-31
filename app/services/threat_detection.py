@@ -1,14 +1,19 @@
-from elasticsearch import Elasticsearch
 from datetime import datetime, timedelta
 import structlog
-from typing import List, Dict, Any
-from app.config import settings
+from typing import List, Dict
+from app.services.es_client import (
+    get_elasticsearch,
+    raise_if_detection_broken,
+)
 
 logger = structlog.get_logger()
 
 class ThreatDetectionService:
     def __init__(self):
-        self.es = Elasticsearch([f"http://{settings.elasticsearch_host}:{settings.elasticsearch_port}"])
+        # Shared, authenticated client. Previously this was built without any
+        # credentials while security_logger used basic_auth, so every detection
+        # query 401'd against a secured cluster. See AUDIT FUNC-001.
+        self.es = get_elasticsearch()
         
     async def detect_brute_force_attacks(self, time_window_minutes: int = 15) -> List[Dict]:
         """Detect multiple failed logins followed by successful login"""
@@ -38,7 +43,7 @@ class ThreatDetectionService:
         }
         
         try:
-            result = self.es.search(index="security-*", body=query)
+            result = await self.es.search(index="security-*", body=query)
             threats = []
 
             if 'aggregations' not in result or 'by_src_ip' not in result['aggregations']:
@@ -74,6 +79,10 @@ class ThreatDetectionService:
             
         except Exception as e:
             logger.error("Error in brute force detection", error=str(e))
+            # Raises for connection/auth failures so a broken detector is
+            # never reported as 'no threats'; returns for a missing index,
+            # which legitimately means nothing has been ingested yet.
+            raise_if_detection_broken(e, "Error in brute force detection")
             return []
     
     async def detect_data_exfiltration(self, threshold_mb: int = 100) -> List[Dict]:
@@ -101,7 +110,7 @@ class ThreatDetectionService:
         }
         
         try:
-            result = self.es.search(index="security-network-*", body=query)
+            result = await self.es.search(index="security-network-*", body=query)
             threats = []
             
             if 'aggregations' not in result or 'by_src_ip' not in result['aggregations']:
@@ -125,6 +134,10 @@ class ThreatDetectionService:
             
         except Exception as e:
             logger.error("Error in data exfiltration detection", error=str(e))
+            # Raises for connection/auth failures so a broken detector is
+            # never reported as 'no threats'; returns for a missing index,
+            # which legitimately means nothing has been ingested yet.
+            raise_if_detection_broken(e, "Error in data exfiltration detection")
             return []
     
     async def detect_powershell_attacks(self) -> List[Dict]:
@@ -153,7 +166,7 @@ class ThreatDetectionService:
                     }
                 }
                 
-                result = self.es.search(index="security-*", body=query)
+                result = await self.es.search(index="security-*", body=query)
                 
                 # Check if hits exist
                 if result.get('hits', {}).get('total', {}).get('value', 0) > 0:
@@ -169,6 +182,10 @@ class ThreatDetectionService:
             
         except Exception as e:
             logger.error("Error in PowerShell attack detection", error=str(e))
+            # Raises for connection/auth failures so a broken detector is
+            # never reported as 'no threats'; returns for a missing index,
+            # which legitimately means nothing has been ingested yet.
+            raise_if_detection_broken(e, "Error in PowerShell attack detection")
             return []
     
     async def correlate_apt_indicators(self) -> List[Dict]:
@@ -195,6 +212,10 @@ class ThreatDetectionService:
             
         except Exception as e:
             logger.error("Error in APT correlation", error=str(e))
+            # Raises for connection/auth failures so a broken detector is
+            # never reported as 'no threats'; returns for a missing index,
+            # which legitimately means nothing has been ingested yet.
+            raise_if_detection_broken(e, "Error in APT correlation")
             return []
     
     async def hunt_ecs_powershell_external(self) -> List[Dict]:
@@ -234,7 +255,7 @@ class ThreatDetectionService:
         }
         
         try:
-            result = self.es.search(index="security-*", body=query)
+            result = await self.es.search(index="security-*", body=query)
             threats = []
             
             if result['hits']['total']['value'] > 0:
@@ -251,6 +272,10 @@ class ThreatDetectionService:
             return threats
         except Exception as e:
             logger.error("Error in ECS PowerShell hunting", error=str(e))
+            # Raises for connection/auth failures so a broken detector is
+            # never reported as 'no threats'; returns for a missing index,
+            # which legitimately means nothing has been ingested yet.
+            raise_if_detection_broken(e, "Error in ECS PowerShell hunting")
             return []
 
     async def hunt_apt_kill_chain_ecs(self) -> List[Dict]:
@@ -281,7 +306,7 @@ class ThreatDetectionService:
         }
         
         try:
-            c2_result = self.es.search(index="security-*", body=c2_query)
+            c2_result = await self.es.search(index="security-*", body=c2_query)
             
             # Correlate across both
             if (powershell_threats and 
@@ -300,6 +325,10 @@ class ThreatDetectionService:
             return []
         except Exception as e:
             logger.error("Error in APT kill chain hunting", error=str(e))
+            # Raises for connection/auth failures so a broken detector is
+            # never reported as 'no threats'; returns for a missing index,
+            # which legitimately means nothing has been ingested yet.
+            raise_if_detection_broken(e, "Error in APT kill chain hunting")
             return []
 
     async def hunt_lateral_movement_ecs(self) -> List[Dict]:
@@ -333,7 +362,7 @@ class ThreatDetectionService:
         }
         
         try:
-            result = self.es.search(index="security-*", body=query)
+            result = await self.es.search(index="security-*", body=query)
             threats = []
             
             if 'aggregations' in result:
@@ -357,6 +386,10 @@ class ThreatDetectionService:
             return threats
         except Exception as e:
             logger.error("Error in lateral movement hunting", error=str(e))
+            # Raises for connection/auth failures so a broken detector is
+            # never reported as 'no threats'; returns for a missing index,
+            # which legitimately means nothing has been ingested yet.
+            raise_if_detection_broken(e, "Error in lateral movement hunting")
             return []
 
     async def hunt_privilege_escalation_ecs(self) -> List[Dict]:
@@ -365,7 +398,8 @@ class ThreatDetectionService:
         start_time = end_time - timedelta(hours=1)
         
         query = {
-            "query": {
+            "size": 500,
+                "query": {
                 "bool": {
                     "must": [
                         {"range": {"@timestamp": {"gte": start_time, "lte": end_time}}}
@@ -381,7 +415,7 @@ class ThreatDetectionService:
         }
         
         try:
-            result = self.es.search(index="security-*", body=query)
+            result = await self.es.search(index="security-*", body=query)
             threats = []
             
             if result['hits']['total']['value'] > 0:
@@ -401,6 +435,10 @@ class ThreatDetectionService:
             return threats
         except Exception as e:
             logger.error("Error in privilege escalation hunting", error=str(e))
+            # Raises for connection/auth failures so a broken detector is
+            # never reported as 'no threats'; returns for a missing index,
+            # which legitimately means nothing has been ingested yet.
+            raise_if_detection_broken(e, "Error in privilege escalation hunting")
             return []
 
 threat_detector = ThreatDetectionService()
