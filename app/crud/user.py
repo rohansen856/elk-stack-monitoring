@@ -40,9 +40,17 @@ def create_user(db: Session, user: UserCreate) -> User:
     return db_user
 
 
+# Pre-computed hash of a throwaway value. Verifying against it for unknown
+# accounts keeps the work done (and therefore the response time) the same
+# whether or not the address exists. Previously the function returned before
+# any bcrypt work, leaking account existence by timing. See AUDIT SEC-013.
+_DUMMY_HASH = bcrypt.hashpw(b"not-a-real-password", bcrypt.gensalt()).decode("utf-8")
+
+
 def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
     user = get_user_by_email(db, email)
     if not user:
+        verify_password(password, _DUMMY_HASH)
         return None
     if not verify_password(password, user.hashed_password):
         return None
