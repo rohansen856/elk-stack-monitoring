@@ -1,13 +1,26 @@
-from fastapi import APIRouter, BackgroundTasks
-from typing import List, Dict
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from typing import List
+from app.config import settings
 from app.services.threat_detection import threat_detector
 from app.services.alerting import alerting_service
 from app.services.security_logger import security_logger
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import structlog
 
 logger = structlog.get_logger()
 router = APIRouter()
+
+
+def forbid_in_production() -> None:
+    """Dependency: hard-disable an endpoint when running in production.
+
+    The /simulate/* endpoints write caller-supplied events straight into the
+    SIEM. They exist for demos and testing, so they must not be reachable on a
+    production deployment even by an authenticated user. Returns 404 rather
+    than 403 so the endpoints are not discoverable. See AUDIT SEC-001.
+    """
+    if settings.is_production:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
 
 class PowerShellSimulation(BaseModel):
     command: str
@@ -26,7 +39,9 @@ class PrivilegeEscalationSimulation(BaseModel):
 
 class LateralMovementSimulation(BaseModel):
     user: str
-    hosts: List[str]
+    # Bounded: each element triggers a separate Elasticsearch write, so an
+    # unbounded list gave write amplification from a single request.
+    hosts: List[str] = Field(..., min_length=1, max_length=50)
     source_ip: str = "127.0.0.1"
 
 class DataExfiltrationSimulation(BaseModel):
@@ -129,7 +144,7 @@ async def comprehensive_threat_hunt():
         ]
     }
 
-@router.post("/simulate/powershell")
+@router.post("/simulate/powershell", dependencies=[Depends(forbid_in_production)])
 async def simulate_powershell_execution(simulation: PowerShellSimulation):
     """Simulate PowerShell execution for testing threat detection"""
     await security_logger.log_powershell_event(
@@ -142,7 +157,7 @@ async def simulate_powershell_execution(simulation: PowerShellSimulation):
 
     return {
         "status": "success",
-        "message": f"PowerShell event logged for detection testing",
+        "message": "PowerShell event logged for detection testing",
         "event": {
             "command": simulation.command,
             "user": simulation.user,
@@ -152,7 +167,7 @@ async def simulate_powershell_execution(simulation: PowerShellSimulation):
         }
     }
 
-@router.post("/simulate/privilege-escalation")
+@router.post("/simulate/privilege-escalation", dependencies=[Depends(forbid_in_production)])
 async def simulate_privilege_escalation(simulation: PrivilegeEscalationSimulation):
     """Simulate privilege escalation for testing threat detection"""
     await security_logger.log_privilege_escalation_event(
@@ -166,7 +181,7 @@ async def simulate_privilege_escalation(simulation: PrivilegeEscalationSimulatio
 
     return {
         "status": "success",
-        "message": f"Privilege escalation event logged for detection testing",
+        "message": "Privilege escalation event logged for detection testing",
         "event": {
             "command": simulation.command,
             "user": simulation.user,
@@ -177,7 +192,7 @@ async def simulate_privilege_escalation(simulation: PrivilegeEscalationSimulatio
         }
     }
 
-@router.post("/simulate/lateral-movement")
+@router.post("/simulate/lateral-movement", dependencies=[Depends(forbid_in_production)])
 async def simulate_lateral_movement(simulation: LateralMovementSimulation):
     """Simulate lateral movement across multiple hosts"""
     events_logged = []
@@ -199,7 +214,7 @@ async def simulate_lateral_movement(simulation: LateralMovementSimulation):
         "source_ip": simulation.source_ip
     }
 
-@router.post("/simulate/data-exfiltration")
+@router.post("/simulate/data-exfiltration", dependencies=[Depends(forbid_in_production)])
 async def simulate_data_exfiltration(simulation: DataExfiltrationSimulation):
     """Simulate data exfiltration for testing threat detection"""
     await security_logger.log_network_event(
