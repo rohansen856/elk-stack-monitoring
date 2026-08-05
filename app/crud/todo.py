@@ -33,7 +33,7 @@ def get_todo(db: Session, todo_id: int, user_id: int) -> Optional[Todo]:
 
 
 def create_todo(db: Session, todo: TodoCreate, user_id: int) -> Todo:
-    db_todo = Todo(**todo.dict(), owner_id=user_id)
+    db_todo = Todo(**todo.model_dump(), owner_id=user_id)
     db.add(db_todo)
     db.commit()
     db.refresh(db_todo)
@@ -45,7 +45,7 @@ def update_todo(db: Session, todo_id: int, todo_update: TodoUpdate, user_id: int
     if not db_todo:
         return None
 
-    update_data = todo_update.dict(exclude_unset=True)
+    update_data = todo_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(db_todo, field, value)
 
@@ -69,6 +69,8 @@ def get_todo_count(db: Session, user_id: int) -> int:
 
 
 def get_completed_todo_count(db: Session, user_id: int) -> int:
+    # noqa: E712 below - SQLAlchemy filters need `== True`; `is True` does not
+    # produce valid SQL.
     return db.query(Todo).filter(
-        and_(Todo.owner_id == user_id, Todo.completed == True)
+        and_(Todo.owner_id == user_id, Todo.completed == True)  # noqa: E712
     ).count()
