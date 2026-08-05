@@ -1,10 +1,12 @@
 import time
 import uuid
-from fastapi import Request, Response
+from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
-from prometheus_client import Counter, Histogram, generate_latest
+from prometheus_client import Counter, Histogram
 import structlog
+
+from app.config import settings
 
 logger = structlog.get_logger()
 
@@ -65,10 +67,18 @@ class MetricsMiddleware(BaseHTTPMiddleware):
 
 
 def add_cors_middleware(app):
+    """CORS driven by configuration.
+
+    Origins were hardcoded to localhost with allow_credentials=True, so no
+    deployed origin could ever match, while nginx separately added a wildcard
+    `Access-Control-Allow-Origin: *` that browsers reject for credentialed
+    requests. Origins now come from CORS_ORIGINS and nginx no longer sets the
+    header. See AUDIT CORS-001.
+    """
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://localhost:8080"],
+        allow_origins=settings.cors_origin_list,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
     )
