@@ -1,15 +1,16 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from typing import Optional
 from datetime import datetime
 
 
 class UserBase(BaseModel):
     email: EmailStr
-    username: str
+    username: str = Field(..., min_length=3, max_length=50)
 
 
 class UserCreate(UserBase):
-    password: str
+    # Previously unconstrained: a single-character password was accepted.
+    password: str = Field(..., min_length=12, max_length=128)
 
 
 class UserResponse(UserBase):
@@ -18,8 +19,7 @@ class UserResponse(UserBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserLogin(BaseModel):
