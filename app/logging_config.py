@@ -1,7 +1,6 @@
 import structlog
 import logging
 import logstash
-import socket
 from app.config import settings
 
 
