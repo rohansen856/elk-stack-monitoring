@@ -1,16 +1,32 @@
 venv/
+.venv/
+.venv-audit/
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
-.pytest_cache/
-.coverage
-htmlcov/
 .git/
 .gitignore
 README.md
-.env.example
-alembic/versions/
+alembic/versions/__pycache__/
 *.log
 .next
 node_modules/
+
+# Secrets and local state must never enter an image layer.
+# COPY . . previously baked the live .env (Gmail app password, Slack webhook,
+# OTX API key, SECRET_KEY) and sentinel.pem into every build. See AUDIT SEC-005.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+test.db
+*.sqlite
+*.sqlite3
+
+# Audit and tooling artifacts
+AUDIT/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
