@@ -1,4 +1,3 @@
-import pytest
 from fastapi.testclient import TestClient
 
 
@@ -127,13 +126,20 @@ def test_search_todos(client: TestClient, test_user):
 
 
 def test_unauthorized_access(client: TestClient, test_todo):
+    """An unauthenticated write must be rejected.
+
+    This asserted 403 previously, documenting HTTPBearer's old behaviour for a
+    missing header. 401 is the correct response for "no credentials supplied";
+    both are accepted so the test states the security property rather than an
+    implementation detail of the framework version.
+    """
     response = client.post("/api/v1/todos/", json=test_todo)
-    assert response.status_code == 403
+    assert response.status_code in (401, 403)
 
 
 def test_access_other_users_todo(client: TestClient, test_todo):
-    user1 = {"email": "user1@example.com", "username": "user1", "password": "password123"}
-    user2 = {"email": "user2@example.com", "username": "user2", "password": "password123"}
+    user1 = {"email": "user1@example.com", "username": "user1", "password": "TestPassword123!"}
+    user2 = {"email": "user2@example.com", "username": "user2", "password": "TestPassword123!"}
 
     headers1 = get_auth_headers(client, user1)
     headers2 = get_auth_headers(client, user2)
