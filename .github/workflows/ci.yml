@@ -1,0 +1,146 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  lint:
+    name: Lint (ruff, mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install ruff mypy
+      - name: ruff
+        run: ruff check app tests
+      - name: mypy
+        run: mypy app --ignore-missing-imports
+        continue-on-error: true  # advisory until annotations are complete
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: sentinel
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: todo_db
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sentinel -d todo_db"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -r requirements.txt pytest-cov fakeredis freezegun respx
+      - name: pytest
+        # The suite configures its own environment in tests/conftest.py, so it
+        # runs without a .env file - verified under `env -i`.
+        run: pytest --cov=app --cov-report=term-missing --cov-report=xml
+      - name: Migration matches models
+        env:
+          DATABASE_URL: postgresql://sentinel:testpassword@localhost:5432/todo_db
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: ci-only-secret
+          EMAIL_SMTP_SERVER: localhost
+          EMAIL_SMTP_PORT: "2525"
+          EMAIL_SMTP_USERNAME: ci@example.com
+          EMAIL_SMTP_PASSWORD: ci
+          EMAIL_SENDER_ADDRESS: ci@example.com
+          EMAIL_SENDER_NAME: CI
+        run: |
+          # The test suite uses create_all, so without this the Alembic
+          # migration is never exercised at all (AUDIT DATA-001).
+          alembic upgrade head
+          alembic downgrade base
+          alembic upgrade head
+          OUT=$(alembic revision --autogenerate -m ci-drift-check 2>&1)
+          echo "$OUT"
+          if echo "$OUT" | grep -qE "Detected (added|removed|changed|server default|NOT NULL)"; then
+            echo "::error::Alembic migrations do not match the models"
+            exit 1
+          fi
+
+  security:
+    name: Security scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # gitleaks needs full history
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install pip-audit bandit
+      - name: pip-audit
+        run: pip-audit -r requirements.txt
+      - name: bandit
+        run: bandit -r app -ll
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  config:
+    name: Deployment config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: docker compose config
+        # A duplicate YAML key once made this file unparseable on master, so the
+        # documented `docker compose up -d` failed for everyone (AUDIT OPS-001).
+        env:
+          REDIS_PASSWORD: ci-placeholder
+        run: |
+          cp .env.example .env
+          cp website/.env.example website/.env
+          docker compose config > /dev/null
+      - name: Kubernetes manifests parse
+        run: python -c "import yaml,glob; [list(yaml.safe_load_all(open(f))) for f in glob.glob('k8s/base/*.yaml')]"
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - name: npm ci
+        # Must be `ci`, not `install --force`: the lockfile is the contract.
+        run: npm ci
+      - name: Type check
+        run: npx tsc --noEmit
+      - name: Build
+        run: npm run build
+      - name: npm audit
+        run: npm audit --audit-level=high
+        continue-on-error: true
