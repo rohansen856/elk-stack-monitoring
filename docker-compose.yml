@@ -3,12 +3,18 @@ services:
     image: nginx:alpine
     ports:
       - "80:80"
+      - "443:443"
     depends_on:
       - frontend
       - app
       - kibana
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # TLS material. Generate a development certificate first:
+      #   mkdir -p nginx/certs && openssl req -x509 -nodes -newkey rsa:2048 \
+      #     -keyout nginx/certs/server.key -out nginx/certs/server.crt \
+      #     -days 365 -subj "/CN=localhost"
+      - ./nginx/certs:/etc/nginx/certs:ro
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/nginx-health"]
       interval: 30s
@@ -23,7 +29,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U user -d todo_db"]
       interval: 30s
@@ -32,12 +38,15 @@ services:
 
   redis:
     image: redis:7-alpine
+    # Redis previously ran with no authentication while published on 0.0.0.0.
+    # See AUDIT CFG-001.
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}"]
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -49,7 +58,7 @@ services:
       - xpack.security.enabled=true
       - xpack.security.http.ssl.enabled=false
       - xpack.security.transport.ssl.enabled=false
-      - ELASTIC_PASSWORD=elastic123
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:?ELASTIC_PASSWORD must be set in .env}
       - cluster.name=docker-cluster
       - bootstrap.memory_lock=true
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
@@ -63,13 +72,14 @@ services:
     env_file:
       - ./.env
     ports:
-      - "9200:9200"
-      - "9300:9300"
+      - "127.0.0.1:9200:9200"
+      - "127.0.0.1:9300:9300"
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     healthcheck:
       test:
-        ["CMD-SHELL", "curl -u elastic:elastic123 -f http://localhost:9200/_cluster/health || exit 1"]
+        - CMD-SHELL
+        - curl -u "elastic:$$ELASTIC_PASSWORD" -f http://localhost:9200/_cluster/health || exit 1
       interval: 30s
       timeout: 10s
       retries: 5
@@ -81,15 +91,15 @@ services:
       - "XPACK_MONITORING_ENABLED=true"
       - "XPACK_MONITORING_ELASTICSEARCH_HOSTS=http://elasticsearch:9200"
       - "XPACK_MONITORING_ELASTICSEARCH_USERNAME=elastic"
-      - "XPACK_MONITORING_ELASTICSEARCH_PASSWORD=elastic123"
+      - "XPACK_MONITORING_ELASTICSEARCH_PASSWORD=${ELASTIC_PASSWORD}"
       - "LOG_LEVEL=info"
     ports:
-      - "5044:5044" # Beats input
-      - "5000:5000" # TCP app logs
-      - "9600:9600" # Logstash API
-      - "514:514/udp" # Syslog UDP
-      - "514:514/tcp" # Syslog TCP
-      - "12201:12201" # GELF
+      - "127.0.0.1:5044:5044" # Beats input
+      - "127.0.0.1:5000:5000" # TCP app logs
+      - "127.0.0.1:9600:9600" # Logstash API
+      - "127.0.0.1:514:514/udp" # Syslog UDP
+      - "127.0.0.1:514:514/tcp" # Syslog TCP
+      - "127.0.0.1:12201:12201" # GELF
     volumes:
       - ./logstash/pipeline:/usr/share/logstash/pipeline:ro
     depends_on:
@@ -106,8 +116,8 @@ services:
     env_file:
       - ./.env
     environment:
-      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:-elastic123}
-      - KIBANA_SYSTEM_PASSWORD=${KIBANA_SYSTEM_PASSWORD:-kibana123}
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:?ELASTIC_PASSWORD must be set in .env}
+      - KIBANA_SYSTEM_PASSWORD=${KIBANA_SYSTEM_PASSWORD:?KIBANA_SYSTEM_PASSWORD must be set in .env}
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -185,7 +195,7 @@ services:
     env_file:
       - ./.env
     ports:
-      - "5601:5601"
+      - "127.0.0.1:5601:5601"
     volumes:
       - ./kibana/kibana.yml:/usr/share/kibana/config/kibana.yml
     environment:
@@ -270,10 +280,12 @@ services:
         condition: service_healthy
       kibana:
         condition: service_healthy
+      logstash:
+        condition: service_started
     environment:
       - ELASTICSEARCH_HOSTS=http://localhost:9200
       - ELASTICSEARCH_USERNAME=elastic
-      - ELASTICSEARCH_PASSWORD=elastic123
+      - ELASTICSEARCH_PASSWORD=${ELASTIC_PASSWORD}
       - LOGSTASH_HOSTS=localhost:5044
     command: >
       packetbeat
@@ -281,8 +293,6 @@ services:
         --strict.perms=false
         -c /usr/share/packetbeat/packetbeat.yml
     restart: unless-stopped
-    depends_on:
-      - logstash
     logging:
       driver: "json-file"
       options:
@@ -304,7 +314,7 @@ services:
   app:
     build: .
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     env_file:
       - ./.env
     depends_on:
@@ -316,8 +326,6 @@ services:
         condition: service_healthy
       logstash:
         condition: service_healthy
-    volumes:
-      - .:/app
     command:
       [
         "uvicorn",
@@ -326,7 +334,6 @@ services:
         "0.0.0.0",
         "--port",
         "8000",
-        "--reload",
       ]
 
   frontend:
@@ -334,7 +341,7 @@ services:
       context: ./website
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     env_file:
       - ./website/.env
     depends_on:
