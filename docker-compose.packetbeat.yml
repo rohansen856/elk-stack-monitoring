@@ -1,0 +1,44 @@
+# ===================================================================
+# Docker Compose - Packetbeat Service
+# ===================================================================
+# Add this to your main docker-compose.yml or run separately
+# Monitors host network traffic for malicious IP detection
+# ===================================================================
+
+version: '3.8'
+
+services:
+  packetbeat:
+    image: docker.elastic.co/beats/packetbeat:8.11.0
+    container_name: packetbeat
+    user: root
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    network_mode: host  # IMPORTANT: Must use host network to capture traffic
+    volumes:
+      - ./packetbeat/packetbeat.yml:/usr/share/packetbeat/packetbeat.yml:ro
+      - /var/log/packetbeat:/var/log/packetbeat
+      - packetbeat-data:/usr/share/packetbeat/data
+    environment:
+      - ELASTICSEARCH_HOSTS=http://localhost:9200
+      - ELASTICSEARCH_USERNAME=elastic
+      - ELASTICSEARCH_PASSWORD=${ELASTIC_PASSWORD}
+      - LOGSTASH_HOSTS=localhost:5044
+    command: >
+      packetbeat
+        -e
+        --strict.perms=false
+        -c /usr/share/packetbeat/packetbeat.yml
+    restart: unless-stopped
+    depends_on:
+      - logstash
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  packetbeat-data:
+    driver: local
