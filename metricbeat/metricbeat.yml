@@ -49,13 +49,13 @@ processors:
 output.elasticsearch:
   hosts: ["elasticsearch:9200"]
   username: "elastic"
-  password: "elastic123"
+  password: "${ELASTIC_PASSWORD}"
   index: "metricbeat-%{[agent.version]}-%{+yyyy.MM.dd}"
 
 setup.kibana:
   host: "kibana:5601"
   username: "elastic"
-  password: "elastic123"
+  password: "${ELASTIC_PASSWORD}"
 
 setup.dashboards.enabled: false
 setup.template.enabled: true
