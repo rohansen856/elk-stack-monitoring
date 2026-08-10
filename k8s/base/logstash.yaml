@@ -33,6 +33,11 @@ spec:
       containers:
       - name: logstash
         image: docker.elastic.co/logstash/logstash:8.11.0
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
         ports:
         - containerPort: 5044
         - containerPort: 5000
@@ -79,9 +84,8 @@ spec:
         configMap:
           name: logstash-config
       - name: logstash-pipeline
-        hostPath:
-          path: /home/rcsen/Documents/sih25/ps25238/logstash/pipeline
-          type: Directory
+        configMap:
+          name: logstash-pipeline
 
 ---
 apiVersion: v1

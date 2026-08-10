@@ -17,6 +17,17 @@ resources:
   - beats.yaml
   # - ingress.yaml  # Commented out due to ingress controller issues
 
+# The Logstash pipeline is generated from the real files in the repository
+# rather than mounted from a host path that only exists on one workstation.
+configMapGenerator:
+  - name: logstash-pipeline
+    files:
+      - ../../logstash/pipeline/logstash.conf
+      - ../../logstash/pipeline/threat-intel-enrichment.conf
+
+generatorOptions:
+  disableNameSuffixHash: true
+
 images:
   - name: ps25238-app
     newTag: latest
