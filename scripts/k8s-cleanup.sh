@@ -52,7 +52,7 @@ read -p "Do you want to remove the NGINX Ingress Controller? [y/N]: " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     print_status "Removing NGINX Ingress Controller..."
-    kubectl delete -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml --ignore-not-found=true
+    kubectl delete -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.3/deploy/static/provider/kind/deploy.yaml --ignore-not-found=true
 fi
 
 # Check cluster type and offer to delete cluster

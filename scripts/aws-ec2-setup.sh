@@ -81,7 +81,21 @@ echo ""
 echo -e "${YELLOW}Step 3: Cleaning up previous installation (if any)...${NC}"
 
 # Stop and remove containers, networks, and volumes
-docker compose down -v 2>/dev/null || true
+# `down -v` deletes the postgres, redis and elasticsearch volumes. Running
+# this against an existing deployment is silent, irreversible data loss, so
+# require explicit confirmation. See AUDIT CONFIGURATION_AUDIT.
+if [ "${CONFIRM_DESTROY:-}" = "yes" ]; then
+    docker compose down -v
+else
+    echo "WARNING: this removes all data volumes (postgres, redis, elasticsearch)."
+    read -r -p "Type 'yes' to delete all data, anything else to keep it: " reply
+    if [ "$reply" = "yes" ]; then
+        docker compose down -v
+    else
+        echo "Keeping existing volumes."
+        docker compose down
+    fi
+fi 2>/dev/null || true
 echo "✓ Cleaned up previous installation"
 
 # Step 4: Build and start services
@@ -124,12 +138,12 @@ fi
 echo ""
 echo -e "${YELLOW}Ensuring Kibana password is set correctly...${NC}"
 
-# Force set the password to kibana123
+# Force set the kibana_system password from KIBANA_SYSTEM_PASSWORD
 docker compose exec -T elasticsearch curl -X POST -s \
-  -u "elastic:elastic123" \
+  -u "elastic:${ELASTIC_PASSWORD:?ELASTIC_PASSWORD must be set}" \
   "http://localhost:9200/_security/user/kibana_system/_password" \
   -H "Content-Type: application/json" \
-  -d '{"password":"kibana123"}' > /dev/null 2>&1
+  -d "{\"password\":\"${KIBANA_SYSTEM_PASSWORD:?KIBANA_SYSTEM_PASSWORD must be set}\"}" > /dev/null 2>&1
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓ Kibana password confirmed${NC}"
@@ -178,8 +192,8 @@ echo -e "${GREEN}Backend:${NC}   http://$EC2_IP/backend/docs"
 echo -e "${GREEN}Kibana:${NC}    http://$EC2_IP/monitoring"
 echo ""
 echo "Default credentials:"
-echo -e "${GREEN}Elasticsearch:${NC} elastic / elastic123"
-echo -e "${GREEN}Kibana:${NC}        elastic / elastic123"
+echo -e "${GREEN}Elasticsearch:${NC} elastic / (ELASTIC_PASSWORD from .env - not printed)"
+echo -e "${GREEN}Kibana:${NC}        elastic / (ELASTIC_PASSWORD from .env - not printed)"
 echo ""
 echo "To view logs:"
 echo "  docker compose logs -f"
