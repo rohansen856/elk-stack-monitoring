@@ -18,6 +18,11 @@ spec:
       initContainers:
       - name: wait-for-postgres
         image: postgres:15-alpine
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
         command: ['sh', '-c']
         args:
         - |
@@ -33,6 +38,11 @@ spec:
             name: app-secrets
       - name: wait-for-redis
         image: redis:7-alpine
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
         command: ['sh', '-c']
         args:
         - |
@@ -43,6 +53,11 @@ spec:
           echo "Redis is ready!"
       - name: wait-for-elasticsearch
         image: curlimages/curl:latest
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
         command: ['sh', '-c']
         args:
         - |
@@ -54,6 +69,11 @@ spec:
       containers:
       - name: backend
         image: ps25238-app:latest
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
         ports:
         - containerPort: 8000
         envFrom:

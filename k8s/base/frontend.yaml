@@ -18,6 +18,11 @@ spec:
       containers:
       - name: frontend
         image: ps25238-frontend:latest
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
         ports:
         - containerPort: 3000
         env:
@@ -36,13 +41,13 @@ spec:
             cpu: "400m"
         livenessProbe:
           httpGet:
-            path: /api/health
+            path: /frontend/api/health
             port: 3000
           initialDelaySeconds: 30
           periodSeconds: 10
         readinessProbe:
           httpGet:
-            path: /api/health
+            path: /frontend/api/health
             port: 3000
           initialDelaySeconds: 10
           periodSeconds: 5
