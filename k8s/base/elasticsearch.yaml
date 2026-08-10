@@ -68,14 +68,19 @@ spec:
         env:
         - name: discovery.type
           value: single-node
+        - name: ELASTIC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: ELASTIC_PASSWORD
         - name: xpack.security.enabled
-          value: "false"
+          value: "true"
         - name: cluster.name
           value: docker-cluster
         - name: bootstrap.memory_lock
           value: "true"
         - name: xpack.security.enrollment.enabled
-          value: "false"
+          value: "true"
         - name: action.auto_create_index
           value: "true"
         - name: cluster.routing.allocation.disk.threshold_enabled
