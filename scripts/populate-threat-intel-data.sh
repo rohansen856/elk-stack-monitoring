@@ -4,7 +4,7 @@
 
 ES_URL="http://localhost:9200"
 ES_USER="elastic"
-ES_PASS="elastic123"
+ES_PASS="${ELASTICSEARCH_PASSWORD:?ELASTICSEARCH_PASSWORD must be set}"
 CURRENT_DATE=$(date -u +"%Y.%m.%d")
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 

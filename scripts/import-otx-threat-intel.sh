@@ -4,6 +4,10 @@
 
 set -e
 
+# mktemp instead of a predictable world-readable path.
+OTX_DATA_FILE="$(mktemp)"
+trap 'rm -f "$OTX_DATA_FILE"' EXIT
+
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
@@ -12,7 +16,7 @@ NC='\033[0m'
 OTX_API_KEY="${ALIENVAULT_OTX_API_KEY:-}"
 ES_URL="http://localhost:9200"
 ES_USER="elastic"
-ES_PASS="elastic123"
+ES_PASS="${ELASTICSEARCH_PASSWORD:?ELASTICSEARCH_PASSWORD must be set}"
 
 # Check if API key is set
 if [ -z "$OTX_API_KEY" ]; then
@@ -26,7 +30,7 @@ echo -e "${BLUE}Fetching real threat intelligence from AlienVault OTX...${NC}"
 
 # Fetch recent threat pulses
 curl -s "https://otx.alienvault.com/api/v1/pulses/activity?limit=20" \
-  -H "X-OTX-API-KEY: $OTX_API_KEY" > /tmp/otx_data.json
+  -H "X-OTX-API-KEY: $OTX_API_KEY" > "$OTX_DATA_FILE"
 
 # Extract and import indicators using Python
 python3 << 'PYTHON_SCRIPT'
@@ -34,12 +38,12 @@ import json
 import subprocess
 from datetime import datetime
 
-with open('/tmp/otx_data.json', 'r') as f:
+with open('"$OTX_DATA_FILE"', 'r') as f:
     data = json.load(f)
 
 ES_URL = "http://localhost:9200"
 ES_USER = "elastic"
-ES_PASS = "elastic123"
+ES_PASS = "${ES_PASS}"
 CURRENT_DATE = datetime.utcnow().strftime("%Y.%m.%d")
 timestamp = datetime.utcnow().isoformat() + "Z"
 

@@ -18,7 +18,7 @@ NC='\033[0m' # No Color
 
 ES_URL="${ELASTICSEARCH_URL:-http://localhost:9200}"
 ES_USER="${ELASTICSEARCH_USER:-elastic}"
-ES_PASS="${ELASTICSEARCH_PASSWORD:-elastic123}"
+ES_PASS="${ELASTICSEARCH_PASSWORD:?ELASTICSEARCH_PASSWORD must be set}"
 
 echo -e "${BLUE}=================================================${NC}"
 echo -e "${BLUE}  THREAT INTELLIGENCE INDEX SETUP${NC}"
