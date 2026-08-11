@@ -1,16 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { getAuthHeader, unauthorized } from '@/lib/server-session'
+
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000/api/v1'
 
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader) {
-      return NextResponse.json(
-        { detail: 'Missing authorization header' },
-        { status: 401 }
-      )
-    }
+    const authHeader = getAuthHeader(request)
+    if (!authHeader) return unauthorized()
 
     const response = await fetch(`${BACKEND_URL}/users/me`, {
       method: 'GET',

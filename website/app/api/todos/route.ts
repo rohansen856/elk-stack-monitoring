@@ -1,18 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { getAuthHeader, unauthorized } from '@/lib/server-session'
+
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000/api/v1'
 
-function getAuthHeader(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  if (!authHeader) {
-    throw new Error('Missing authorization header')
-  }
-  return authHeader
-}
 
 export async function GET(request: NextRequest) {
   try {
     const authHeader = getAuthHeader(request)
+    if (!authHeader) return unauthorized()
 
     const response = await fetch(`${BACKEND_URL}/todos/`, {
       method: 'GET',
@@ -42,6 +38,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const authHeader = getAuthHeader(request)
+    if (!authHeader) return unauthorized()
     const body = await request.json()
 
     const response = await fetch(`${BACKEND_URL}/todos/`, {
