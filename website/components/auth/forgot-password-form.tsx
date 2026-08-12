@@ -22,11 +22,7 @@ import { toast } from "sonner"
 
 type Step = "email" | "otp" | "password" | "success"
 
-interface ForgotPasswordFormProps {
-  className?: string
-}
-
-export function ForgotPasswordForm({ className }: ForgotPasswordFormProps) {
+export function ForgotPasswordForm() {
   const router = useRouter()
   const [step, setStep] = useState<Step>("email")
   const [email, setEmail] = useState("")

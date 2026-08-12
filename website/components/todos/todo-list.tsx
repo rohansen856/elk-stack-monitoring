@@ -9,8 +9,8 @@ interface TodoListProps {
   todos: Todo[]
   filter: 'all' | 'active' | 'completed'
   isLoading?: boolean
-  onToggle: (id: string) => Promise<void>
-  onDelete: (id: string) => Promise<void>
+  onToggle: (id: number) => Promise<void>
+  onDelete: (id: number) => Promise<void>
 }
 
 export function TodoList({
