@@ -60,12 +60,9 @@ const nextConfig = {
       ],
     },
   ],
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
+  // ignoreDuringBuilds / ignoreBuildErrors were both true, which hid 13
+  // TypeScript errors - three of them genuine type-safety failures in the todo
+  // store. See AUDIT QA-002.
 }
 
 export default nextConfig
