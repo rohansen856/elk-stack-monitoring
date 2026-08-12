@@ -1,174 +1,128 @@
 import { create } from "zustand"
-import { persist, createJSONStorage } from "zustand/middleware"
-import { clientAuthCookies } from "../auth-cookies"
 
+export interface AuthUser {
+  id: number
+  email: string
+  username: string
+}
+
+/**
+ * Client-side auth state.
+ *
+ * Deliberately holds NO token. The JWT lives in an httpOnly cookie that this
+ * code cannot read; every request to /api/* is same-origin, so the browser
+ * attaches the cookie automatically and the server-side route handler converts
+ * it into an Authorization header.
+ *
+ * Previously the token was kept here and in a JS-readable cookie for 30 days,
+ * so any XSS meant full account takeover. See AUDIT SEC-006.
+ */
 interface AuthState {
-  token: string | null
-  user: { id: string; email: string; username: string } | null
+  user: AuthUser | null
+  isAuthenticated: boolean
   isLoading: boolean
   error: string | null
   isHydrated: boolean
   login: (email: string, password: string) => Promise<void>
   register: (username: string, email: string, password: string) => Promise<void>
-  logout: () => void
+  logout: () => Promise<void>
+  loadSession: () => Promise<void>
   clearError: () => void
-  setToken: (
-    token: string,
-    user: { id: string; email: string; username: string }
-  ) => void
 }
 
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set) => ({
-      token: null,
-      user: null,
-      isLoading: false,
-      error: null,
-      isHydrated: false,
+export const useAuthStore = create<AuthState>()((set) => ({
+  user: null,
+  isAuthenticated: false,
+  isLoading: false,
+  error: null,
+  isHydrated: false,
 
-      login: async (email: string, password: string) => {
-        set({ isLoading: true, error: null })
-        try {
-          const response = await fetch("/api/auth/login", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, password }),
-          })
+  login: async (email: string, password: string) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      })
 
-          if (!response.ok) {
-            const error = await response.json()
-            throw new Error(error.detail || "Login failed")
-          }
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.detail || "Login failed")
+      }
 
-          const data = await response.json()
-
-          // Fetch user details to get the actual username
-          const userResponse = await fetch("/api/auth/me", {
-            headers: {
-              Authorization: `Bearer ${data.access_token}`,
-            },
-          })
-
-          let userData = {
-            id: "1",
-            email: email,
-            username: email.split("@")[0],
-          }
-          if (userResponse.ok) {
-            const userInfo = await userResponse.json()
-            userData = {
-              id: userInfo.id?.toString() || "1",
-              email: userInfo.email || email,
-              username: userInfo.username || email.split("@")[0],
-            }
-          }
-
-          // Store in cookies
-          clientAuthCookies.setAuth(data.access_token, userData)
-
-          set({
-            token: data.access_token,
-            user: userData,
-            isLoading: false,
-          })
-        } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : "Login failed",
-            isLoading: false,
-          })
-          throw error
-        }
-      },
-
-      register: async (username: string, email: string, password: string) => {
-        set({ isLoading: true, error: null })
-        try {
-          const response = await fetch("/api/auth/register", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ username, email, password }),
-          })
-
-          if (!response.ok) {
-            const error = await response.json()
-            throw new Error(error.detail || "Registration failed")
-          }
-
-          const data = await response.json()
-
-          // Fetch user details to get the actual username
-          const userResponse = await fetch("/api/auth/me", {
-            headers: {
-              Authorization: `Bearer ${data.access_token}`,
-            },
-          })
-
-          let userData = { id: "1", email: email, username: username }
-          if (userResponse.ok) {
-            const userInfo = await userResponse.json()
-            userData = {
-              id: userInfo.id?.toString() || "1",
-              email: userInfo.email || email,
-              username: userInfo.username || username,
-            }
-          }
-
-          // Store in cookies
-          clientAuthCookies.setAuth(data.access_token, userData)
-
-          set({
-            token: data.access_token,
-            user: userData,
-            isLoading: false,
-          })
-        } catch (error) {
-          set({
-            error:
-              error instanceof Error ? error.message : "Registration failed",
-            isLoading: false,
-          })
-          throw error
-        }
-      },
-
-      logout: () => {
-        clientAuthCookies.clearAuth()
-        set({ token: null, user: null, error: null })
-      },
-
-      clearError: () => {
-        set({ error: null })
-      },
-
-      setToken: (token: string, user: { id: string; email: string; username: string }) => {
-        clientAuthCookies.setAuth(token, user)
-        set({ token, user })
-      },
-    }),
-    {
-      name: "auth-store",
-      storage: createJSONStorage(() => ({
-        getItem: (name: string) => {
-          if (typeof window === "undefined") return null
-          const token = clientAuthCookies.getToken()
-          const user = clientAuthCookies.getUser()
-          if (!token || !user) return null
-          return JSON.stringify({ state: { token, user, isHydrated: true } })
-        },
-        setItem: (name: string, value: string) => {
-          // Cookies are set directly in login/register/setToken methods
-          // This is just for Zustand compatibility
-        },
-        removeItem: (name: string) => {
-          clientAuthCookies.clearAuth()
-        },
-      })),
-      onRehydrateStorage: () => (state) => {
-        if (state) {
-          state.isHydrated = true
-        }
-      },
+      const data = await response.json()
+      set({
+        user: data.user ?? null,
+        isAuthenticated: true,
+        isLoading: false,
+        isHydrated: true,
+      })
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : "Login failed",
+        isLoading: false,
+        isAuthenticated: false,
+      })
+      throw error
     }
-  )
-)
+  },
+
+  register: async (username: string, email: string, password: string) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, email, password }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.detail || "Registration failed")
+      }
+
+      const data = await response.json()
+      set({
+        user: data.user ?? null,
+        isAuthenticated: true,
+        isLoading: false,
+        isHydrated: true,
+      })
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : "Registration failed",
+        isLoading: false,
+        isAuthenticated: false,
+      })
+      throw error
+    }
+  },
+
+  logout: async () => {
+    try {
+      // Server-side so the httpOnly cookie is actually cleared; client code
+      // cannot delete it.
+      await fetch("/api/auth/logout", { method: "POST" })
+    } finally {
+      set({ user: null, isAuthenticated: false, isHydrated: true })
+    }
+  },
+
+  /** Restore session state on load by asking the server who we are. */
+  loadSession: async () => {
+    try {
+      const response = await fetch("/api/auth/me")
+      if (response.ok) {
+        const user = await response.json()
+        set({ user, isAuthenticated: true, isHydrated: true })
+      } else {
+        set({ user: null, isAuthenticated: false, isHydrated: true })
+      }
+    } catch {
+      set({ user: null, isAuthenticated: false, isHydrated: true })
+    }
+  },
+
+  clearError: () => set({ error: null }),
+}))
