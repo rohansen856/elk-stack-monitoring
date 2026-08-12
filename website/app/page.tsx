@@ -6,15 +6,15 @@ import { useAuthStore } from '@/lib/store/auth-store'
 
 export default function Home() {
   const router = useRouter()
-  const { token } = useAuthStore()
+  const { isAuthenticated } = useAuthStore()
 
   useEffect(() => {
-    if (token) {
+    if (isAuthenticated) {
       router.push('/dashboard')
     } else {
       router.push('/login')
     }
-  }, [token, router])
+  }, [isAuthenticated, router])
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">

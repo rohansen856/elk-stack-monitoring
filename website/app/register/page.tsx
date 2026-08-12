@@ -7,13 +7,13 @@ import { RegisterForm } from '@/components/auth/register-form'
 
 export default function RegisterPage() {
   const router = useRouter()
-  const { token } = useAuthStore()
+  const { isAuthenticated } = useAuthStore()
 
   useEffect(() => {
-    if (token) {
+    if (isAuthenticated) {
       router.push('/dashboard')
     }
-  }, [token, router])
+  }, [isAuthenticated, router])
 
   return (
     <main className="flex items-center justify-center min-h-screen bg-background px-4">

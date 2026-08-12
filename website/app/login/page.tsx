@@ -7,13 +7,13 @@ import { LoginForm } from '@/components/auth/login-form'
 
 export default function LoginPage() {
   const router = useRouter()
-  const { token } = useAuthStore()
+  const { isAuthenticated } = useAuthStore()
 
   useEffect(() => {
-    if (token) {
+    if (isAuthenticated) {
       router.push('/dashboard')
     }
-  }, [token, router])
+  }, [isAuthenticated, router])
 
   return (
     <main className="flex items-center justify-center min-h-screen bg-background px-4">

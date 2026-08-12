@@ -12,7 +12,7 @@ import { AlertCircle, Loader2 } from "lucide-react"
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { token, user, isHydrated } = useAuthStore()
+  const { user, isAuthenticated, isHydrated, loadSession } = useAuthStore()
   const {
     todos,
     isLoading,
@@ -27,19 +27,22 @@ export default function DashboardPage() {
   } = useTodoStore()
 
   useEffect(() => {
+    // Ask the server who we are; the session cookie is httpOnly, so the client
+    // cannot inspect it directly.
     if (!isHydrated) {
+      void loadSession()
       return
     }
 
-    if (!token) {
+    if (!isAuthenticated) {
       router.push("/login")
       return
     }
 
-    fetchTodos(token)
-  }, [token, isHydrated, router, fetchTodos])
+    void fetchTodos()
+  }, [isAuthenticated, isHydrated, router, fetchTodos, loadSession])
 
-  if (!isHydrated || !token) {
+  if (!isHydrated || !isAuthenticated) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -56,18 +59,18 @@ export default function DashboardPage() {
     priority?: Priority,
     due_date?: string
   ) => {
-    await createTodo(token, title, description, priority, due_date)
+    await createTodo(title, description, priority, due_date)
   }
 
-  const handleToggleTodo = async (id: string) => {
+  const handleToggleTodo = async (id: number) => {
     const todo = todos.find((t) => t.id === id)
     if (todo) {
-      await updateTodo(token, id, { completed: !todo.completed })
+      await updateTodo(id, { completed: !todo.completed })
     }
   }
 
-  const handleDeleteTodo = async (id: string) => {
-    await deleteTodo(token, id)
+  const handleDeleteTodo = async (id: number) => {
+    await deleteTodo(id)
   }
 
   return (
