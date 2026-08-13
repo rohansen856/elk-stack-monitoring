@@ -6,7 +6,9 @@ WORKDIR /app
 FROM base AS deps
 RUN apk add --no-cache libc6-compat
 COPY package.json package-lock.json ./
-RUN npm i -f --production=false
+# npm ci, not `npm i -f`: --force overrides peer resolution and shipped vaul
+# against an unsupported React major. See AUDIT DEP-003.
+RUN npm ci
 
 # builder: copy deps and source, build
 FROM base AS builder
