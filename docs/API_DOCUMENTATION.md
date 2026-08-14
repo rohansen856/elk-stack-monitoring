@@ -59,7 +59,7 @@ Register a new user account.
 **Response:**
 ```json
 {
-  "id": "uuid",
+  "id": 1,
   "username": "johndoe",
   "email": "john@example.com",
   "is_active": true,
@@ -69,15 +69,19 @@ Register a new user account.
 ```
 
 #### POST /api/v1/users/login
-Authenticate user and receive JWT token.
+Authenticate user and receive a JWT.
 
-**Request Body:**
-```json
-{
-  "email": "john@example.com",
-  "password": "securepassword123"
-}
+**Content-Type:** `application/x-www-form-urlencoded` (OAuth2 password flow).
+A JSON body is rejected with `422`.
+
+Note the field is named `username`, but it carries the user's **email address**.
+
+**Request Body (form-encoded):**
 ```
+username=john@example.com&password=securepassword123
+```
+
+**Rate limit:** 10 requests/minute per IP.
 
 **Response:**
 ```json
@@ -93,7 +97,7 @@ Get current user profile (requires authentication).
 **Response:**
 ```json
 {
-  "id": "uuid",
+  "id": 1,
   "username": "johndoe",
   "email": "john@example.com",
   "is_active": true,
@@ -104,7 +108,7 @@ Get current user profile (requires authentication).
 
 ### Todo Management (`/api/v1/todos`)
 
-#### GET /api/v1/todos
+#### GET /api/v1/todos/
 Retrieve user's todos with optional filtering.
 
 **Query Parameters:**
@@ -118,7 +122,7 @@ Retrieve user's todos with optional filtering.
 ```json
 [
   {
-    "id": "uuid",
+    "id": 1,
     "title": "Complete security audit",
     "description": "Review all security configurations",
     "completed": false,
@@ -130,7 +134,7 @@ Retrieve user's todos with optional filtering.
 ]
 ```
 
-#### POST /api/v1/todos
+#### POST /api/v1/todos/
 Create a new todo item.
 
 **Request Body:**
@@ -165,9 +169,12 @@ Update a specific todo.
 ```
 
 #### DELETE /api/v1/todos/{todo_id}
-Delete a specific todo.
+Delete a todo.
 
-**Response:** `204 No Content`
+**Response:** `200 OK`
+```json
+{ "message": "Todo deleted successfully" }
+```
 
 ### Security Monitoring (`/api/v1/security`)
 
@@ -229,17 +236,6 @@ Analyze APT kill-chain correlations.
 }
 ```
 
-#### POST /api/v1/security/alerts/test
-Test the alerting system.
-
-**Response:**
-```json
-{
-  "message": "Test alert sent successfully",
-  "channels": ["elasticsearch", "console"],
-  "timestamp": "2024-11-19T10:30:00Z"
-}
-```
 
 ## Data Models
 
@@ -348,12 +344,12 @@ curl "http://localhost:8000/api/v1/security/threats/brute-force"
 ## Security Considerations
 
 ### Authentication
-- All user endpoints (except registration/login) require valid JWT tokens
+- All endpoints except registration, login, forgot-password and reset-password require a valid JWT - including every `/api/v1/security/*` endpoint tokens
 - Tokens expire after 30 minutes by default
 - Use HTTPS in production environments
 
 ### Rate Limiting
-Consider implementing rate limiting for:
+Rate limiting is enforced at two layers: nginx (`auth_limit` 5r/s on auth routes, `api_limit` 10r/s elsewhere) and in the application via slowapi (login 10/min, register 5/min, forgot-password 3/min, reset-password 10/min).
 - Authentication endpoints (prevent brute force)
 - Registration endpoints (prevent spam)
 - Security monitoring endpoints
