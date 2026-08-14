@@ -1,5 +1,14 @@
 # ✅ Browser Monitoring is WORKING!
 
+> **Note on this document.** This is a point-in-time status report from the
+> original build, not maintained reference documentation. Specific figures,
+> timestamps and "working" claims describe one historical run and were not
+> reproducible during the 2026-10-07 audit. Verified behaviour is recorded in
+> `AUDIT/`. Treat the setup and configuration sections as useful; treat the
+> status claims as historical.
+
+
+
 ## Summary
 
 **Browser traffic monitoring is successfully detecting malicious IPs and generating security alerts!**
@@ -22,11 +31,11 @@ Your browsing activity to the malicious IP `194.11.246.101` has been captured, e
 
 | Timestamp | Source IP | Destination IP | Status |
 |-----------|-----------|----------------|--------|
-| 2025-12-09T11:04:03Z | 10.20.30.117 | 194.11.246.101 | open |
-| 2025-12-09T11:00:54Z | 10.20.30.117 | 194.11.246.101 | open |
-| 2025-12-09T10:56:44Z | 10.20.30.117 | 194.11.246.101 | open |
-| 2025-12-09T10:55:41Z | 10.20.30.117 | 194.11.246.101 | open |
-| 2025-12-09T10:52:32Z | 10.20.30.117 | 194.11.246.101 | open |
+| 2025-12-09T11:04:03Z | <workstation-ip> | 194.11.246.101 | open |
+| 2025-12-09T11:00:54Z | <workstation-ip> | 194.11.246.101 | open |
+| 2025-12-09T10:56:44Z | <workstation-ip> | 194.11.246.101 | open |
+| 2025-12-09T10:55:41Z | <workstation-ip> | 194.11.246.101 | open |
+| 2025-12-09T10:52:32Z | <workstation-ip> | 194.11.246.101 | open |
 
 **Total Alerts:** 8 alerts detected and indexed
 
@@ -44,7 +53,7 @@ The alerts appear in the Security application under the Alerts page.
 
 ```bash
 # View all OTX alerts
-curl -s -u elastic:elastic123 \
+curl -s -u elastic:$ELASTICSEARCH_PASSWORD \
   "http://localhost:9200/.internal.alerts-security.alerts-default-000001/_search?size=10&sort=@timestamp:desc" \
   -H 'Content-Type: application/json' -d '{
   "query": {
@@ -58,7 +67,7 @@ curl -s -u elastic:elastic123 \
 
 ```bash
 # Count total OTX alerts
-curl -s -u elastic:elastic123 \
+curl -s -u elastic:$ELASTICSEARCH_PASSWORD \
   "http://localhost:9200/.internal.alerts-security.alerts-default-000001/_count" \
   -H 'Content-Type: application/json' -d '{
   "query": {"match": {"kibana.alert.rule.name": "AlienVault OTX"}}
@@ -101,7 +110,7 @@ curl -s -u elastic:elastic123 \
 
 ```bash
 # Simulate browser visit to malicious IP
-printf '{"@timestamp":"%s","source":{"ip":"10.20.30.117","port":54321},"destination":{"ip":"194.11.246.101","port":80},"message":"Test browser visit","event_type":"http_request"}'\n \
+printf '{"@timestamp":"%s","source":{"ip":"<workstation-ip>","port":54321},"destination":{"ip":"194.11.246.101","port":80},"message":"Test browser visit","event_type":"http_request"}'\n \
   "$(date -u +'%Y-%m-%dT%H:%M:%S.000Z')" | nc -w1 localhost 5000
 ```
 
@@ -112,7 +121,7 @@ printf '{"@timestamp":"%s","source":{"ip":"10.20.30.117","port":54321},"destinat
 sleep 120
 
 # Check for new alerts
-curl -s -u elastic:elastic123 \
+curl -s -u elastic:$ELASTICSEARCH_PASSWORD \
   "http://localhost:9200/.internal.alerts-security.alerts-default-000001/_search?size=1&sort=@timestamp:desc" \
   -H 'Content-Type: application/json' -d '{
   "query": {
@@ -185,22 +194,22 @@ output.logstash:
 
 1. **Check if events are being captured:**
    ```bash
-   curl -s -u elastic:elastic123 "http://localhost:9200/security-threats-*/_count"
+   curl -s -u elastic:$ELASTICSEARCH_PASSWORD "http://localhost:9200/security-threats-*/_count"
    ```
 
 2. **Check if events are enriched:**
    ```bash
-   curl -s -u elastic:elastic123 "http://localhost:9200/security-threats-*/_search?size=1&sort=@timestamp:desc" | jq '.hits.hits[]._source | {enriched: .threat.enriched, tags: .tags}'
+   curl -s -u elastic:$ELASTICSEARCH_PASSWORD "http://localhost:9200/security-threats-*/_search?size=1&sort=@timestamp:desc" | jq '.hits.hits[]._source | {enriched: .threat.enriched, tags: .tags}'
    ```
 
 3. **Check if rule is enabled:**
    ```bash
-   curl -s -u elastic:elastic123 "http://localhost:9200/.kibana_alerting_cases_8.11.0_001/_doc/alert:badbc420-d4d6-11f0-8f81-c36783e3ce88" | jq '._ source.alert.enabled'
+   curl -s -u elastic:$ELASTICSEARCH_PASSWORD "http://localhost:9200/.kibana_alerting_cases_8.11.0_001/_doc/alert:<rule-id>" | jq '._ source.alert.enabled'
    ```
 
 4. **Check if rule task is registered:**
    ```bash
-   curl -s -u elastic:elastic123 "http://localhost:9200/.kibana_task_manager_8.11.0_001/_count" -H 'Content-Type: application/json' -d '{"query":{"term":{"task.taskType":"alerting:siem.queryRule"}}}'
+   curl -s -u elastic:$ELASTICSEARCH_PASSWORD "http://localhost:9200/.kibana_task_manager_8.11.0_001/_count" -H 'Content-Type: application/json' -d '{"query":{"term":{"task.taskType":"alerting:siem.queryRule"}}}'
    ```
 
 5. **Restart Kibana to re-register rules:**
@@ -249,7 +258,6 @@ Or send simulated events via netcat as shown above.
 ## 🎉 Success Metrics
 
 ✅ **8 security alerts generated** for malicious IP connections
-✅ **100% detection rate** for OTX-flagged IPs
 ✅ **Real-time monitoring** with 1-minute rule execution interval
 ✅ **Enriched threat intelligence** from AlienVault OTX
 ✅ **MITRE ATT&CK mapping** for C2 communication (TA0011, T1071)

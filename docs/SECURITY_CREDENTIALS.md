@@ -1,5 +1,14 @@
 # Elasticsearch Security Enabled ✅
 
+> **Note on this document.** This is a point-in-time status report from the
+> original build, not maintained reference documentation. Specific figures,
+> timestamps and "working" claims describe one historical run and were not
+> reproducible during the 2026-10-07 audit. Verified behaviour is recorded in
+> `AUDIT/`. Treat the setup and configuration sections as useful; treat the
+> status claims as historical.
+
+
+
 ## Current Configuration
 
 **Elasticsearch Security: ENABLED**
@@ -12,21 +21,21 @@
 ```bash
 # Elasticsearch Superuser
 Username: elastic
-Password: elastic123
+Password: $ELASTICSEARCH_PASSWORD
 
 # Kibana System User (for Kibana internal use)
 Username: kibana_system
-Password: I6aZ-X3eqk3Ty-5LGNWB
+Password: <REDACTED - rotate this credential>
 ```
 
 ## Services Configured with Authentication
 
-✅ **Elasticsearch** - Security enabled, password: `elastic123`
+✅ **Elasticsearch** - Security enabled, password: `$ELASTICSEARCH_PASSWORD`
 ✅ **Kibana** - Using `kibana_system` user with auto-generated password
-✅ **Logstash** - All output pipelines use `elastic:elastic123` credentials
+✅ **Logstash** - All output pipelines use `elastic:$ELASTICSEARCH_PASSWORD` credentials
 ✅ **Filebeat** - Configured with elastic credentials in `filebeat.yml`
 ✅ **Metricbeat** - Configured with elastic credentials in `metricbeat.yml`
-✅ **Backend App** - Using authenticated URL: `http://elastic:elastic123@elasticsearch:9200`
+✅ **Backend App** - Using authenticated URL: `http://elastic:$ELASTICSEARCH_PASSWORD@elasticsearch:9200`
 
 ## Testing Security
 
@@ -36,7 +45,7 @@ curl http://localhost:9200
 # Response: {"error":{"root_cause":[{"type":"security_exception"...
 
 # Test Elasticsearch WITH authentication (should succeed)
-curl -u elastic:elastic123 http://localhost:9200
+curl -u elastic:$ELASTICSEARCH_PASSWORD http://localhost:9200
 # Response: {"name":"...","cluster_name":"docker-cluster"...
 
 # Test Kibana (works through nginx)
@@ -71,7 +80,7 @@ curl http://localhost/monitoring/api/status
 ## Files Modified for Security
 
 1. `docker-compose.yml`:
-   - Elasticsearch: `xpack.security.enabled=true`, `ELASTIC_PASSWORD=elastic123`
+   - Elasticsearch: `xpack.security.enabled=true`, `ELASTIC_PASSWORD=$ELASTICSEARCH_PASSWORD`
    - Health checks updated with credentials
 
 2. `kibana/kibana.yml`:
@@ -151,19 +160,19 @@ POST /_security/user/beats_writer
 
 If you see authentication errors:
 1. Verify credentials match in all config files
-2. Check Elasticsearch is accessible: `curl -u elastic:elastic123 http://localhost:9200`
+2. Check Elasticsearch is accessible: `curl -u elastic:$ELASTICSEARCH_PASSWORD http://localhost:9200`
 3. Restart the affected service: `docker compose restart [service]`
 
 ### Elaticsearch auth issue
 
 If you see a authentication error like this multiple times:
 ```bash
-elasticsearch-1  | {"@timestamp":"2025-12-07T17:50:19.665Z", "log.level": "INFO", "message":"Authentication of [kibana_system] was terminated by realm [reserved] - failed to authenticate user [kibana_system]", "ecs.version": "1.2.0","service.name":"ES_ECS","event.dataset":"elasticsearch.server","process.thread.name":"elasticsearch[b03b3ca6798f][system_critical_read][T#3]","log.logger":"org.elasticsearch.xpack.security.authc.RealmsAuthenticator","trace.id":"7a4e193c93a685adfe52ae485c5c6c04","elasticsearch.cluster.uuid":"iwZtlhMoTUGOTn9jAivD4Q","elasticsearch.node.id":"K1T-Ik1wTyWsUZ2eHWGNbQ","elasticsearch.node.name":"b03b3ca6798f","elasticsearch.cluster.name":"docker-cluster"}
+elasticsearch-1  | {"@timestamp":"2025-12-07T17:50:19.665Z", "log.level": "INFO", "message":"Authentication of [kibana_system] was terminated by realm [reserved] - failed to authenticate user [kibana_system]", "ecs.version": "1.2.0","service.name":"ES_ECS","event.dataset":"elasticsearch.server","process.thread.name":"elasticsearch[<node-name>][system_critical_read][T#3]","log.logger":"org.elasticsearch.xpack.security.authc.RealmsAuthenticator","trace.id":"<trace-id>","elasticsearch.cluster.uuid":"<cluster-uuid>","elasticsearch.node.id":"<node-id>","elasticsearch.node.name":"<node-name>","elasticsearch.cluster.name":"docker-cluster"}
 ```
 
 Just run the following to set the correct password:
 ```bash
-docker compose exec -T elasticsearch curl -X POST -s -u "elastic:elastic123" "http://localhost:9200/_security/user/kibana_system/_password" -H "Content-Type: application/json" -d '{"password":"kibana123"}'
+docker compose exec -T elasticsearch curl -X POST -s -u "elastic:$ELASTICSEARCH_PASSWORD" "http://localhost:9200/_security/user/kibana_system/_password" -H "Content-Type: application/json" -d '{"password":"$KIBANA_SYSTEM_PASSWORD"}'
 ```
 
 ### Kibana "Unable to retrieve version" Error
@@ -177,7 +186,7 @@ If Kibana can't connect:
 
 If Logstash shows authentication errors:
 1. Check `logstash/pipeline/logstash.conf` has credentials in all `elasticsearch {}` blocks
-2. Verify format is: `user => "elastic"` and `password => "elastic123"`
+2. Verify format is: `user => "elastic"` and `password => "$ELASTICSEARCH_PASSWORD"`
 3. Restart: `docker compose restart logstash`
 
 ## Status
