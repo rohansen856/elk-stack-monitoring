@@ -156,7 +156,7 @@ FROM security-*
 
 ```bash
 curl -X POST "http://localhost:5601/api/saved_objects/_import" \
-  -u "elastic:elastic123" \
+  -u "elastic:$ELASTICSEARCH_PASSWORD" \
   -H "kbn-xsrf: true" \
   --form file=@kibana/otx-detection-rules.ndjson
 ```
@@ -204,13 +204,13 @@ printf '{"@timestamp":"%s","source":{"ip":"192.168.1.100","port":54321},"destina
 sleep 5
 
 # Verify event was enriched
-curl -s -u elastic:elastic123 "http://localhost:9200/security-*/_search?q=194.11.246.101&size=1&sort=@timestamp:desc&pretty" | grep -A20 "threat"
+curl -s -u elastic:$ELASTICSEARCH_PASSWORD "http://localhost:9200/security-*/_search?q=194.11.246.101&size=1&sort=@timestamp:desc&pretty" | grep -A20 "threat"
 
 # Wait for rule execution (1-2 minutes)
 sleep 120
 
 # Check if alert was generated
-curl -s -u elastic:elastic123 "http://localhost:9200/.internal.alerts-*/_search?pretty" \
+curl -s -u elastic:$ELASTICSEARCH_PASSWORD "http://localhost:9200/.internal.alerts-*/_search?pretty" \
   -H 'Content-Type: application/json' -d '{
   "query": {
     "bool": {
@@ -275,7 +275,7 @@ sleep 120
 
 ```bash
 # List all OTX alerts from last hour
-curl -s -u elastic:elastic123 "http://localhost:9200/.internal.alerts-*/_search?pretty" \
+curl -s -u elastic:$ELASTICSEARCH_PASSWORD "http://localhost:9200/.internal.alerts-*/_search?pretty" \
   -H 'Content-Type: application/json' -d '{
   "query": {
     "bool": {
@@ -313,12 +313,12 @@ curl -s -u elastic:elastic123 "http://localhost:9200/.internal.alerts-*/_search?
 ```bash
 # Disable a rule
 curl -X POST "http://localhost:5601/api/alerting/rule/{rule_id}/_disable" \
-  -u "elastic:elastic123" \
+  -u "elastic:$ELASTICSEARCH_PASSWORD" \
   -H "kbn-xsrf: true"
 
 # Enable a rule
 curl -X POST "http://localhost:5601/api/alerting/rule/{rule_id}/_enable" \
-  -u "elastic:elastic123" \
+  -u "elastic:$ELASTICSEARCH_PASSWORD" \
   -H "kbn-xsrf: true"
 ```
 
@@ -337,7 +337,7 @@ curl -X POST "http://localhost:5601/api/alerting/rule/{rule_id}/_enable" \
 
 ```bash
 # Check rule execution status
-curl -s -u elastic:elastic123 "http://localhost:9200/.kibana*/_search" \
+curl -s -u elastic:$ELASTICSEARCH_PASSWORD "http://localhost:9200/.kibana*/_search" \
   -H 'Content-Type: application/json' -d '{
   "query": {
     "bool": {
@@ -464,7 +464,7 @@ WHERE source.ip NOT IN ("192.168.1.100", "10.0.0.1")
 
 2. **Verify events exist**:
    ```bash
-   curl -s -u elastic:elastic123 "http://localhost:9200/security-*/_count?q=threat.intel.dest_ip.provider:AlienVault%20OTX"
+   curl -s -u elastic:$ELASTICSEARCH_PASSWORD "http://localhost:9200/security-*/_count?q=threat.intel.dest_ip.provider:AlienVault%20OTX"
    ```
 
 3. **Check rule execution logs**:
@@ -479,12 +479,12 @@ WHERE source.ip NOT IN ("192.168.1.100", "10.0.0.1")
 
 1. **Check alerts index exists**:
    ```bash
-   curl -s -u elastic:elastic123 "http://localhost:9200/_cat/indices?v" | grep alerts
+   curl -s -u elastic:$ELASTICSEARCH_PASSWORD "http://localhost:9200/_cat/indices?v" | grep alerts
    ```
 
 2. **Verify alerts were created**:
    ```bash
-   curl -s -u elastic:elastic123 "http://localhost:9200/.internal.alerts-*/_count"
+   curl -s -u elastic:$ELASTICSEARCH_PASSWORD "http://localhost:9200/.internal.alerts-*/_count"
    ```
 
 3. **Check Kibana permissions**:

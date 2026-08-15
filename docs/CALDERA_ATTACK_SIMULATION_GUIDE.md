@@ -495,7 +495,7 @@ Remove-Item -Path "C:\Users\Public\splunkd.exe" -Force
 ```bash
 # Delete test alerts if needed
 curl -X POST "localhost:9200/security-*/_delete_by_query?pretty" \
-  -u "elastic:elastic123" \
+  -u "elastic:$ELASTICSEARCH_PASSWORD" \
   -H 'Content-Type: application/json' \
   -d '{
     "query": {
@@ -632,7 +632,7 @@ telnet localhost 8888
 docker compose logs filebeat --tail 50
 
 # Check Elasticsearch has data
-curl -u "elastic:elastic123" "http://localhost:9200/security-*/_count?pretty"
+curl -u "elastic:$ELASTICSEARCH_PASSWORD" "http://localhost:9200/security-*/_count?pretty"
 
 # Test detection rule manually
 # Run the ES|QL query in Kibana Discover

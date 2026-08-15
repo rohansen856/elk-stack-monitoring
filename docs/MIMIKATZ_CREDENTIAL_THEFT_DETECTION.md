@@ -326,7 +326,7 @@ LOGSTASH_HOST=localhost ./scripts/apt-simulations-test/mimikatz-credential-theft
 
 ```bash
 # Check if events were ingested
-curl -s -u "elastic:elastic123" "http://localhost:9200/security-*/_search?q=mimikatz&size=0"
+curl -s -u "elastic:$ELASTICSEARCH_PASSWORD" "http://localhost:9200/security-*/_search?q=mimikatz&size=0"
 ```
 
 **Expected**: Events ingested into `security-windows-logs-*`
@@ -335,7 +335,7 @@ curl -s -u "elastic:elastic123" "http://localhost:9200/security-*/_search?q=mimi
 
 ```bash
 # Run the primary detection query
-curl -u "elastic:elastic123" -X POST "http://localhost:9200/_query?format=txt" \
+curl -u "elastic:$ELASTICSEARCH_PASSWORD" -X POST "http://localhost:9200/_query?format=txt" \
   -H "Content-Type: application/json" \
   -d '{"query": "FROM security-* | WHERE message RLIKE \".*(mimikatz|DCSync).*\" | STATS events = COUNT(*) BY syslog_server | LIMIT 10"}'
 ```

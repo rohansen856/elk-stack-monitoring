@@ -336,7 +336,7 @@ LOGSTASH_HOST=localhost ./scripts/apt-simulations-test/lateral-movement-apt.sh
 
 ```bash
 # Check if events were ingested
-curl -s -u "elastic:elastic123" "http://localhost:9200/security-*/_search?q=PsExec OR WinRM&size=0"
+curl -s -u "elastic:$ELASTICSEARCH_PASSWORD" "http://localhost:9200/security-*/_search?q=PsExec OR WinRM&size=0"
 ```
 
 **Expected**: Events in `security-windows-logs-*`, `security-auth-logs-*`
@@ -345,7 +345,7 @@ curl -s -u "elastic:elastic123" "http://localhost:9200/security-*/_search?q=PsEx
 
 ```bash
 # Run primary detection query
-curl -u "elastic:elastic123" -X POST "http://localhost:9200/_query?format=txt" \
+curl -u "elastic:$ELASTICSEARCH_PASSWORD" -X POST "http://localhost:9200/_query?format=txt" \
   -H "Content-Type: application/json" \
   -d '{"query": "FROM security-* | WHERE message RLIKE \".*Lateral.*\" | STATS events = COUNT(*) BY user.name | LIMIT 10"}'
 ```

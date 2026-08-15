@@ -1,5 +1,14 @@
 # Threat Intelligence Implementation Summary
 
+> **Note on this document.** This is a point-in-time status report from the
+> original build, not maintained reference documentation. Specific figures,
+> timestamps and "working" claims describe one historical run and were not
+> reproducible during the 2026-10-07 audit. Verified behaviour is recorded in
+> `AUDIT/`. Treat the setup and configuration sections as useful; treat the
+> status claims as historical.
+
+
+
 ## Implementation Status: ✅ COMPLETE
 
 Date: December 8, 2025
@@ -23,7 +32,7 @@ System: Sentinel Advanced Threat Detection Platform
 
 **Verification:**
 ```bash
-$ curl -u elastic:elastic123 'http://localhost:9200/threat-intel-*/_count'
+$ curl -u elastic:$ELASTICSEARCH_PASSWORD 'http://localhost:9200/threat-intel-*/_count'
 {"count":12}  # 5 IPs + 4 domains + 3 hashes
 ```
 
@@ -174,13 +183,13 @@ LOGSTASH_HOST=localhost LOGSTASH_PORT=5000 \
 
 ```bash
 # Count all threat indicators
-curl -u elastic:elastic123 'http://localhost:9200/threat-intel-*/_count'
+curl -u elastic:$ELASTICSEARCH_PASSWORD 'http://localhost:9200/threat-intel-*/_count'
 
 # View all malicious IPs
-curl -u elastic:elastic123 'http://localhost:9200/threat-intel-ips-*/_search?pretty'
+curl -u elastic:$ELASTICSEARCH_PASSWORD 'http://localhost:9200/threat-intel-ips-*/_search?pretty'
 
 # Search for specific IP
-curl -u elastic:elastic123 'http://localhost:9200/threat-intel-ips-*/_search?q=threat.indicator.ip:13.59.205.66'
+curl -u elastic:$ELASTICSEARCH_PASSWORD 'http://localhost:9200/threat-intel-ips-*/_search?q=threat.indicator.ip:13.59.205.66'
 ```
 
 ### 2. Run Threat Intel Test

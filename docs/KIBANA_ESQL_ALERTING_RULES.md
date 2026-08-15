@@ -26,7 +26,7 @@ Before creating any rules, you MUST have authentication data in Elasticsearch. T
 **Verify Data Exists:**
 ```bash
 # Check if indices were created
-curl -u "elastic:elastic123" "http://localhost:9200/_cat/indices/security-auth-*?v"
+curl -u "elastic:$ELASTICSEARCH_PASSWORD" "http://localhost:9200/_cat/indices/security-auth-*?v"
 
 # Should show indices with docs.count > 0
 ```

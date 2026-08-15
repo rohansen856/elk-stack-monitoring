@@ -205,7 +205,7 @@ http://localhost/monitoring/
 # Paste the query and execute
 
 # Or via curl:
-curl -u "elastic:elastic123" -X POST "http://localhost:9200/_query?format=txt" \
+curl -u "elastic:$ELASTICSEARCH_PASSWORD" -X POST "http://localhost:9200/_query?format=txt" \
   -H "Content-Type: application/json" \
   -d '{"query": "YOUR_QUERY_HERE"}'
 ```

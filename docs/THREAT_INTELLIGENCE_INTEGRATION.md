@@ -179,11 +179,11 @@ After running the test, verify threat intel data:
 
 ```bash
 # Check threat intel IP database
-curl -u elastic:elastic123 \
+curl -u elastic:$ELASTICSEARCH_PASSWORD \
   'http://localhost:9200/threat-intel-ips-*/_search?q=threat.indicator.ip:13.59.205.66&pretty'
 
 # Check all threat intel indicators
-curl -u elastic:elastic123 \
+curl -u elastic:$ELASTICSEARCH_PASSWORD \
   'http://localhost:9200/threat-intel-*/_count'
 
 # Expected counts:
@@ -312,7 +312,7 @@ FROM security-*
 ```bash
 # Add malicious IP
 curl -X POST "http://localhost:9200/threat-intel-ips-$(date +%Y.%m.%d)/_doc" \
-  -u "elastic:elastic123" \
+  -u "elastic:$ELASTICSEARCH_PASSWORD" \
   -H 'Content-Type: application/json' \
   -d '{
     "@timestamp": "'$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")'",
@@ -335,7 +335,7 @@ import csv
 from elasticsearch import Elasticsearch
 from datetime import datetime
 
-es = Elasticsearch([{'host': 'localhost', 'port': 9200}], http_auth=('elastic', 'elastic123'))
+es = Elasticsearch([{'host': 'localhost', 'port': 9200}], http_auth=('elastic', '$ELASTICSEARCH_PASSWORD'))
 
 with open('threat_ips.csv', 'r') as f:
     reader = csv.DictReader(f)
@@ -376,13 +376,13 @@ with open('threat_ips.csv', 'r') as f:
 
 ```bash
 # Verify threat intel data exists
-curl -u elastic:elastic123 'http://localhost:9200/threat-intel-*/_count'
+curl -u elastic:$ELASTICSEARCH_PASSWORD 'http://localhost:9200/threat-intel-*/_count'
 
 # Check if indices are being created
-curl -u elastic:elastic123 'http://localhost:9200/_cat/indices?v' | grep threat-intel
+curl -u elastic:$ELASTICSEARCH_PASSWORD 'http://localhost:9200/_cat/indices?v' | grep threat-intel
 
 # Test manual query
-curl -u elastic:elastic123 \
+curl -u elastic:$ELASTICSEARCH_PASSWORD \
   'http://localhost:9200/threat-intel-ips-*/_search?q=threat.indicator.ip:13.59.205.66'
 ```
 

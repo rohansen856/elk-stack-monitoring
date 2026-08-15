@@ -1,5 +1,14 @@
 # AlienVault OTX Integration - Complete ✅
 
+> **Note on this document.** This is a point-in-time status report from the
+> original build, not maintained reference documentation. Specific figures,
+> timestamps and "working" claims describe one historical run and were not
+> reproducible during the 2026-10-07 audit. Verified behaviour is recorded in
+> `AUDIT/`. Treat the setup and configuration sections as useful; treat the
+> status claims as historical.
+
+
+
 ## Implementation Status: PRODUCTION READY
 
 **Date:** December 8, 2025  
@@ -213,7 +222,7 @@ curl -s -H "X-OTX-API-KEY: $ALIENVAULT_OTX_API_KEY" \
 ### 5. Verify Threat Intel Database
 
 ```bash
-curl -u elastic:elastic123 'http://localhost:9200/threat-intel-*/_count'
+curl -u elastic:$ELASTICSEARCH_PASSWORD 'http://localhost:9200/threat-intel-*/_count'
 # Expected: {"count":112}
 ```
 
@@ -315,7 +324,7 @@ curl -s -H "X-OTX-API-KEY: YOUR_KEY" \
   "https://otx.alienvault.com/api/v1/user/me"
 
 # Check recent OTX imports
-curl -u elastic:elastic123 \
+curl -u elastic:$ELASTICSEARCH_PASSWORD \
   'http://localhost:9200/threat-intel-*/_search?q=threat.indicator.provider:AlienVault+OTX&size=1'
 
 # Test threat enrichment

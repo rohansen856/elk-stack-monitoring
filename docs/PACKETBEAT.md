@@ -1,5 +1,14 @@
 # Quick Start: Browser Traffic Monitoring
 
+> **Note on this document.** This is a point-in-time status report from the
+> original build, not maintained reference documentation. Specific figures,
+> timestamps and "working" claims describe one historical run and were not
+> reproducible during the 2026-10-07 audit. Verified behaviour is recorded in
+> `AUDIT/`. Treat the setup and configuration sections as useful; treat the
+> status claims as historical.
+
+
+
 ## 1-Minute Setup
 
 ```bash
@@ -42,12 +51,12 @@ xdg-open http://localhost:5601/app/security/alerts 2>/dev/null || open http://lo
 docker ps | grep packetbeat
 
 # View captured traffic
-curl -s -u elastic:elastic123 \
+curl -s -u elastic:$ELASTICSEARCH_PASSWORD \
   "http://localhost:9200/packetbeat-*/_search?size=5&sort=@timestamp:desc&pretty" \
   | grep -A10 "destination"
 
 # Check for OTX alerts
-curl -s -u elastic:elastic123 \
+curl -s -u elastic:$ELASTICSEARCH_PASSWORD \
   "http://localhost:9200/.internal.alerts-*/_search?q=194.11.246.101&size=1&pretty" \
   | grep "kibana.alert.rule.name"
 ```
@@ -123,14 +132,14 @@ curl http://example.com
 sleep 10
 
 # Check if captured
-curl -s -u elastic:elastic123 "http://localhost:9200/packetbeat-*/_count"
+curl -s -u elastic:$ELASTICSEARCH_PASSWORD "http://localhost:9200/packetbeat-*/_count"
 ```
 
 ### No Alerts Appearing?
 
 1. **Check events are enriched**:
    ```bash
-   curl -s -u elastic:elastic123 \
+   curl -s -u elastic:$ELASTICSEARCH_PASSWORD \
      "http://localhost:9200/security-*/_search?q=194.11.246.101&size=1&pretty" \
      | grep "threat.intel"
    ```

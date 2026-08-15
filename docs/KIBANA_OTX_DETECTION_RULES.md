@@ -159,7 +159,7 @@ Wait 3-5 seconds for Logstash processing, then check:
 
 ```bash
 # Verify event was enriched with OTX data
-curl -s -u elastic:elastic123 "http://localhost:9200/security-*/_search?pretty&size=1" \
+curl -s -u elastic:$ELASTICSEARCH_PASSWORD "http://localhost:9200/security-*/_search?pretty&size=1" \
   -H 'Content-Type: application/json' -d '{
   "query": {
     "bool": {
@@ -198,7 +198,7 @@ curl -s -u elastic:elastic123 "http://localhost:9200/security-*/_search?pretty&s
 sleep 120
 
 # Check if alert was generated
-curl -s -u elastic:elastic123 "http://localhost:9200/.internal.alerts-*/_search?pretty" \
+curl -s -u elastic:$ELASTICSEARCH_PASSWORD "http://localhost:9200/.internal.alerts-*/_search?pretty" \
   -H 'Content-Type: application/json' -d '{
   "query": {
     "bool": {
@@ -234,7 +234,7 @@ curl -s -u elastic:elastic123 "http://localhost:9200/.internal.alerts-*/_search?
 
 **Check rule is enabled**:
 ```bash
-curl -s -u elastic:elastic123 "http://localhost:9200/.kibana*/_search" \
+curl -s -u elastic:$ELASTICSEARCH_PASSWORD "http://localhost:9200/.kibana*/_search" \
   -H 'Content-Type: application/json' -d '{
   "query": {
     "bool": {
@@ -260,7 +260,7 @@ curl -s -u elastic:elastic123 "http://localhost:9200/.kibana*/_search" \
 docker compose logs logstash --tail 50 | grep -i "threat\|enrich"
 
 # Verify threat-intel indices exist
-curl -s -u elastic:elastic123 "http://localhost:9200/_cat/indices?v" | grep threat-intel
+curl -s -u elastic:$ELASTICSEARCH_PASSWORD "http://localhost:9200/_cat/indices?v" | grep threat-intel
 ```
 
 **Expected indices**:
@@ -272,7 +272,7 @@ curl -s -u elastic:elastic123 "http://localhost:9200/_cat/indices?v" | grep thre
 
 **Inspect actual event structure**:
 ```bash
-curl -s -u elastic:elastic123 "http://localhost:9200/security-*/_search?size=1&q=194.11.246.101&pretty" \
+curl -s -u elastic:$ELASTICSEARCH_PASSWORD "http://localhost:9200/security-*/_search?size=1&q=194.11.246.101&pretty" \
   | grep -A50 "_source"
 ```
 

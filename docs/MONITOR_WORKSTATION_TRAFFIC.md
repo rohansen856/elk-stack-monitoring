@@ -126,7 +126,7 @@ sudo packetbeat -e -c /usr/local/etc/packetbeat/packetbeat.yml
 # (This will likely timeout/fail, but Packetbeat will log the attempt)
 
 # 2. Check if event was captured
-curl -s -u elastic:elastic123 \
+curl -s -u elastic:$ELASTICSEARCH_PASSWORD \
   "http://localhost:9200/security-*/_search?q=destination.ip:194.11.246.101&size=1&sort=@timestamp:desc&pretty" \
   | grep -A20 "destination"
 
@@ -134,7 +134,7 @@ curl -s -u elastic:elastic123 \
 sleep 120
 
 # 4. Check for alert
-curl -s -u elastic:elastic123 \
+curl -s -u elastic:$ELASTICSEARCH_PASSWORD \
   "http://localhost:9200/.internal.alerts-*/_search?q=194.11.246.101&size=1&pretty" \
   | grep "kibana.alert.rule.name"
 ```
@@ -278,7 +278,7 @@ echo "⏳ Waiting 2 minutes for detection rule to execute..."
 sleep 120
 
 echo "🔍 Checking for alert..."
-curl -s -u elastic:elastic123 \
+curl -s -u elastic:$ELASTICSEARCH_PASSWORD \
   "http://localhost:9200/.internal.alerts-*/_search?pretty" \
   -H 'Content-Type: application/json' -d '{
   "query": {

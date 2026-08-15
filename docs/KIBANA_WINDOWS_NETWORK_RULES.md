@@ -306,7 +306,7 @@ LOGSTASH_HOST=localhost ./scripts/apt-simulations-test/network-devices.sh
 # 3. Wait 1 minute for Logstash processing
 
 # 4. Verify indices
-curl -u "elastic:elastic123" "http://localhost:9200/_cat/indices/security-*?v&s=index"
+curl -u "elastic:$ELASTICSEARCH_PASSWORD" "http://localhost:9200/_cat/indices/security-*?v&s=index"
 
 # Expected indices:
 # - security-windows-logs-YYYY.MM.DD (29 events)
@@ -320,15 +320,15 @@ curl -u "elastic:elastic123" "http://localhost:9200/_cat/indices/security-*?v&s=
 
 ```bash
 # Check Windows logs
-curl -s -u "elastic:elastic123" \
+curl -s -u "elastic:$ELASTICSEARCH_PASSWORD" \
   "http://localhost:9200/security-windows-logs-*/_search?size=1&pretty"
 
 # Check firewall logs
-curl -s -u "elastic:elastic123" \
+curl -s -u "elastic:$ELASTICSEARCH_PASSWORD" \
   "http://localhost:9200/security-firewall-logs-*/_search?size=1&pretty"
 
 # Check IDS logs
-curl -s -u "elastic:elastic123" \
+curl -s -u "elastic:$ELASTICSEARCH_PASSWORD" \
   "http://localhost:9200/security-ids-logs-*/_search?size=1&pretty"
 ```
 

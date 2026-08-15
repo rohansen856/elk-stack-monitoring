@@ -270,7 +270,7 @@ LOGSTASH_HOST=localhost ./scripts/apt-simulations-test/wannacry-notpetya.sh
 
 ```bash
 # Check if events were ingested
-curl -s -u "elastic:elastic123" "http://localhost:9200/security-*/_search?q=WannaCry&size=0"
+curl -s -u "elastic:$ELASTICSEARCH_PASSWORD" "http://localhost:9200/security-*/_search?q=WannaCry&size=0"
 ```
 
 **Expected**: `"total":{"value":22,"relation":"eq"}`
@@ -279,7 +279,7 @@ curl -s -u "elastic:elastic123" "http://localhost:9200/security-*/_search?q=Wann
 
 ```bash
 # Run the detection query
-curl -u "elastic:elastic123" -X POST "http://localhost:9200/_query?format=txt" \
+curl -u "elastic:$ELASTICSEARCH_PASSWORD" -X POST "http://localhost:9200/_query?format=txt" \
   -H "Content-Type: application/json" \
   -d '{"query": "FROM security-* | WHERE message RLIKE \".*(vssadmin|WannaCry).*\" | STATS ransomware_events = COUNT(*) BY syslog_server | LIMIT 10"}'
 ```

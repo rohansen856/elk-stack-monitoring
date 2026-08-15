@@ -55,7 +55,7 @@ var.types:
 ### Real-Time Statistics
 
 ```bash
-$ curl -u elastic:elastic123 'http://localhost:9200/threat-intel-*/_count'
+$ curl -u elastic:$ELASTICSEARCH_PASSWORD 'http://localhost:9200/threat-intel-*/_count'
 {"count":112}
 ```
 
@@ -121,7 +121,7 @@ cd /home/rcsen/Documents/sih25/elk-stack-monitoring
 ./scripts/import-otx-threat-intel.sh
 
 # Verify import
-curl -u elastic:elastic123 'http://localhost:9200/threat-intel-*/_count'
+curl -u elastic:$ELASTICSEARCH_PASSWORD 'http://localhost:9200/threat-intel-*/_count'
 ```
 
 ## Threat Intelligence Queries
@@ -352,7 +352,7 @@ curl -s -H "X-OTX-API-KEY: $ALIENVAULT_OTX_API_KEY" \
   "https://otx.alienvault.com/api/v1/user/me" | python3 -m json.tool
 
 # Verify recent imports
-curl -u elastic:elastic123 \
+curl -u elastic:$ELASTICSEARCH_PASSWORD \
   'http://localhost:9200/threat-intel-*/_search?q=threat.indicator.provider:AlienVault+OTX&size=0'
 ```
 
