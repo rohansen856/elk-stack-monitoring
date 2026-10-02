@@ -103,6 +103,10 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+        # NOTE: commits before the 2026-10-07 remediation still contain the
+        # credentials the audit found. They were rotated rather than rewritten
+        # out of history, so a full-history scan will report them.
 
   config:
     name: Deployment config

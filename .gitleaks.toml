@@ -1,0 +1,23 @@
+# Gitleaks configuration.
+#
+# The allowlist below covers environment-variable *references* only. It must
+# never be widened to cover literal credentials - the audit found a JWT signing
+# key and a cluster password committed to this public repository, and this scan
+# is what prevents a recurrence.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Environment-variable references and documentation placeholders"
+regexTarget = "match"
+regexes = [
+  # ${VAR}, $VAR and compose-escaped $$VAR are references, not secrets.
+  '''\$\$?\{?[A-Za-z_][A-Za-z0-9_]*\}?''',
+  # Obvious placeholders in examples and templates.
+  '''(?i)(REPLACE_ME|CHANGE_ME|your[-_]?(secret|password|key)|xxxx|<REDACTED)''',
+]
+paths = [
+  # Historical audit record: it quotes the values it found, by design.
+  '''AUDIT/.*''',
+]
