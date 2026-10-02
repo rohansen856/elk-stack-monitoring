@@ -1,0 +1,992 @@
+{
+  "audit_date": "2026-10-07",
+  "repository": "github.com/rohansen856/elk-stack-monitoring",
+  "commit": "88746ef",
+  "findings_count": 39,
+  "counts_by_severity": {
+    "CRITICAL": 5,
+    "HIGH": 11,
+    "MEDIUM": 14,
+    "LOW": 6,
+    "INFO": 3
+  },
+  "counts_by_confidence": {
+    "CONFIRMED": 32,
+    "HIGH": 7,
+    "MEDIUM": 0,
+    "LOW": 0
+  },
+  "disproved": [
+    "Secrets in git history - website/.env held only non-secret URLs; root .env and sentinel.pem never committed",
+    "test.db exposes user data - file is an empty SQLite DB with zero tables",
+    "IDOR in the todos API - cross-user GET/PUT/DELETE all return 404 (verified at runtime)",
+    "python-jose algorithm confusion PYSEC-2024-232 - auth.py:36 pins the algorithms list",
+    "Next.js AVIF image-optimizer RCE - next.config.mjs:11 sets images.unoptimized, and no Server Actions exist",
+    "Todo tests pass only because Redis is down - FALSE; they pass with and without Redis across repeated runs",
+    "Elasticsearch cannot boot below vm.max_map_count 262144 - FALSE; ES 8.11 single-node started green at 65530",
+    "Cross-user OTP redemption - correctly scoped to the owner; OTPs are genuinely single-use"
+  ],
+  "findings": [
+    {
+      "id": "SEC-001",
+      "category": "authorization",
+      "severity": "CRITICAL",
+      "confidence": "CONFIRMED",
+      "title": "Entire /api/v1/security/* router is unauthenticated (14 endpoints, 4 of them SIEM writes)",
+      "component": "backend/security-api",
+      "locations": [
+        "app/api/security.py:38",
+        "app/api/security.py:62",
+        "app/api/security.py:68",
+        "app/api/security.py:74",
+        "app/api/security.py:80",
+        "app/api/security.py:86",
+        "app/api/security.py:92",
+        "app/api/security.py:98",
+        "app/api/security.py:104",
+        "app/api/security.py:110",
+        "app/api/security.py:132",
+        "app/api/security.py:155",
+        "app/api/security.py:180",
+        "app/api/security.py:202",
+        "app/main.py:47"
+      ],
+      "evidence": [
+        "No Depends(...) anywhere in app/api/security.py",
+        "Runtime: all 10 GET endpoints returned HTTP 200 with no Authorization header",
+        "Control in same run: GET /api/v1/todos/ -> 403, GET /api/v1/users/me -> 403",
+        "Runtime: POST /simulate/powershell with user='DOMAIN\\\\Administrator', host='dc01.corp.local', source_ip='203.0.113.9' -> 200 {'status':'success'}"
+      ],
+      "impact": "Anonymous read of raw SIEM telemetry (IPs, usernames, hostnames, command lines) and anonymous write of forged security events that the detectors consume as ground truth. Also an unauthenticated DoS/alert-spam amplifier via /threats/scan BackgroundTasks and the unbounded hosts list.",
+      "actual_behavior": "All 14 endpoints serve anonymous callers.",
+      "expected_behavior": "Authentication required; simulation endpoints gated by role and non-production environment.",
+      "validation": "Live HTTP probe against uvicorn on 127.0.0.1:8099; 403 control endpoints prove the gap is router-specific.",
+      "recommended_fix": "Add dependencies=[Depends(get_current_active_user)] at app/main.py:47; gate /simulate/* by role + settings.environment; bound LateralMovementSimulation.hosts.",
+      "documentation_impact": "docs/API_DOCUMENTATION.md:351 claims all endpoints except register/login require JWT - false. The 4 /simulate/* write endpoints are undocumented entirely."
+    },
+    {
+      "id": "SEC-002",
+      "category": "secrets",
+      "severity": "CRITICAL",
+      "confidence": "CONFIRMED",
+      "title": "JWT signing key and passwords committed to a public repository",
+      "component": "k8s",
+      "locations": [
+        "k8s/base/configmap.yaml:36-45",
+        "k8s/base/configmap.yaml:16",
+        "k8s/base/backend.yaml:33",
+        "k8s/base/backend.yaml:63",
+        "k8s/base/migrate-job.yaml:31",
+        "k8s/base/migrate-job.yaml:40"
+      ],
+      "evidence": [
+        "kind: Secret with base64 SECRET_KEY, POSTGRES_PASSWORD, ELASTIC_PASSWORD, KIBANA_PASSWORD",
+        "git ls-files confirms tracked; first committed in 2bdbbba; repository is public",
+        "gitleaks independently flagged generic-api-key and kubernetes-secret-yaml at this file",
+        "app-secrets is consumed by backend.yaml and migrate-job.yaml (reachability confirmed)",
+        "configmap.yaml:16 places a plaintext DATABASE_URL with password in a ConfigMap"
+      ],
+      "impact": "Anyone can forge a valid HS256 JWT for any user against any Kubernetes deployment using these manifests. ACCESS_TOKEN_EXPIRE_MINUTES here is 43200 (30 days) and no revocation mechanism exists.",
+      "actual_behavior": "Signing key is public.",
+      "expected_behavior": "Secrets sourced from a secret manager, never committed.",
+      "validation": "Static: file tracked in git, decodes to a 48-byte key, wired into the backend Deployment env.",
+      "recommended_fix": "Rotate the key immediately; remove the Secret from git; use sealed/external secrets; purge from history.",
+      "documentation_impact": "docs/KUBERNETES_DEPLOYMENT.md:166 refers to a Secret without warning that it is committed with real values."
+    },
+    {
+      "id": "SEC-003",
+      "category": "cryptography",
+      "severity": "CRITICAL",
+      "confidence": "CONFIRMED",
+      "title": "Password-reset OTP is non-cryptographic and brute-forceable; full account takeover",
+      "component": "backend/auth",
+      "locations": [
+        "app/services/email_service.py:14-16",
+        "app/services/email_service.py:47-60",
+        "app/services/email_service.py:56",
+        "app/api/users.py:111-129",
+        "nginx/nginx.conf:15-17"
+      ],
+      "evidence": [
+        "email_service.py:16 uses random.choices (MT19937), not secrets; secrets is never imported",
+        "PoC: OTP sequence fully reproducible from generator state; state recoverable from 624 outputs",
+        "Runtime: 60 consecutive wrong OTPs -> 60 x HTTP 400, no 429, no lockout",
+        "Runtime: 50 consecutive failed logins -> 50 x HTTP 401, no 429",
+        "grep for ratelimit|slowapi|limiter across app/ returns nothing",
+        "Runtime: 5 forgot-password calls produced 5 simultaneously valid unused OTPs",
+        "Measured 66.7 req/s sequential on loopback; 10^6 keyspace exhaustible within the 15-minute OTP window at modest concurrency"
+      ],
+      "impact": "Account takeover of any account whose email is known.",
+      "actual_behavior": "6-digit MT19937 OTP, 15-minute window, unlimited guesses, multiple OTPs valid at once, stored in cleartext.",
+      "expected_behavior": "CSPRNG token, single valid OTP, attempt limiting with lockout, hashed storage.",
+      "validation": "Live scripted brute force plus an offline generator PoC. Single-use and owner-scoping were separately verified as working correctly, bounding the finding.",
+      "recommended_fix": "secrets.choice; longer/alphanumeric token; per-account attempt counter and lockout; invalidate prior OTPs on issue; throttle forgot-password; store a hash.",
+      "documentation_impact": "Password-reset semantics are undocumented entirely (gap G5)."
+    },
+    {
+      "id": "FUNC-001",
+      "category": "correctness",
+      "severity": "CRITICAL",
+      "confidence": "CONFIRMED",
+      "title": "Threat detection fails open: Elasticsearch 401s are swallowed and reported as 'no threats'",
+      "component": "backend/threat-detection",
+      "locations": [
+        "app/services/threat_detection.py:11",
+        "app/services/security_logger.py:14-16",
+        "app/services/threat_detection.py:75-77",
+        "app/services/threat_detection.py:126-128",
+        "app/services/threat_detection.py:170-172",
+        "app/services/threat_detection.py:196-198",
+        "app/services/threat_detection.py:252-254",
+        "app/services/threat_detection.py:301-303",
+        "app/services/threat_detection.py:358-360",
+        "app/services/threat_detection.py:402-404"
+      ],
+      "evidence": [
+        "threat_detection.py:11 builds Elasticsearch([...]) with no credentials; security_logger.py:16 uses basic_auth",
+        "Runtime against a security-enabled ES 8.11.0: write path succeeded, index security-powershell-logs-2026.10.07 created",
+        "Runtime: GET /threats/brute-force -> 200 {'threats':[],'count':0}",
+        "Server log: AuthenticationException(401, 'security_exception', 'missing authentication credentials for REST request [/security-*/_search]')",
+        "All 8 detectors catch broadly and return []"
+      ],
+      "impact": "The product's core capability is inoperative whenever Elasticsearch security is enabled - which is the shipped docker-compose configuration. A broken detector is indistinguishable from a clean result, so an operator sees '0 threats' and concludes they are safe.",
+      "actual_behavior": "Detectors return HTTP 200 with an empty list while every query 401s.",
+      "expected_behavior": "Authenticated queries; failures surfaced as 503/degraded, never as an empty result.",
+      "validation": "Reproduced end to end against a real security-enabled Elasticsearch, with the authenticated writer path working in the same run as a control.",
+      "recommended_fix": "Share one authenticated ES client factory; re-raise or return an explicit degraded status instead of [].",
+      "documentation_impact": "Invalidates the 'WORKING' rule claims in docs/KIBANA_ESQL_ALERTING_RULES.md:60 and all efficacy metrics in SECURITY.md:314-318."
+    },
+    {
+      "id": "OPS-001",
+      "category": "configuration",
+      "severity": "CRITICAL",
+      "confidence": "CONFIRMED",
+      "title": "docker-compose.yml is invalid YAML; the documented setup cannot start",
+      "component": "deployment",
+      "locations": [
+        "docker-compose.yml:266",
+        "docker-compose.yml:284"
+      ],
+      "evidence": [
+        "docker compose up -d -> failed to parse docker-compose.yml: line 284: mapping key 'depends_on' already defined at line 266",
+        "Present in HEAD commit 88746ef, not only the working tree",
+        "Removing the second depends_on in a scratch copy makes the file parse cleanly (exit 0), so it is the only YAML blocker"
+      ],
+      "impact": "No one cloning the repository can start the stack. docker compose up -d is the primary documented quick-start in five separate documents.",
+      "actual_behavior": "Hard parse error.",
+      "expected_behavior": "Stack starts.",
+      "validation": "docker compose config and docker compose up --dry-run both fail; verified fixed in an isolated copy.",
+      "recommended_fix": "Delete docker-compose.yml:284-285 and merge logstash into the depends_on block at :266; add docker compose config to CI.",
+      "documentation_impact": "README.md:55, docs/index.md:45, SECURITY.md:234, docs/SETUP_AND_TROUBLESHOOTING.md:151 and CLAUDE.md all document a command that fails."
+    },
+    {
+      "id": "SEC-004",
+      "title": "elastic123 hardcoded as cluster superuser password repository-wide",
+      "category": "secrets",
+      "locations": [
+        "app/config.py:18",
+        "docker-compose.yml:52",
+        "docker-compose.yml:72",
+        "logstash/pipeline/logstash.conf:456-517",
+        "logstash/pipeline/threat-intel-enrichment.conf:20-323",
+        "filebeat/filebeat.yml:104-111",
+        "metricbeat/metricbeat.yml:51-58",
+        "docker-compose.packetbeat.yml:26",
+        "scripts/aws-ec2-setup.sh:129"
+      ],
+      "evidence": [
+        "gitleaks: 71 curl-auth-user hits across docs and scripts",
+        "No ELASTICSEARCH_PASSWORD key exists in .env, so the config.py:18 default is what actually runs"
+      ],
+      "impact": "A single published password grants elastic superuser on every default deployment.",
+      "recommended_fix": "Source from a secret store with no default; fail closed when unset; rotate; purge from docs.",
+      "severity": "HIGH",
+      "confidence": "CONFIRMED",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "Static inspection; see FINDINGS.md for detail.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_AUDIT.md."
+    },
+    {
+      "id": "SEC-005",
+      "title": "Live .env secrets and an RSA private key are baked into the backend image; container runs as root",
+      "category": "secrets",
+      "locations": [
+        ".dockerignore",
+        "Dockerfile:12",
+        "Dockerfile:5-7"
+      ],
+      "evidence": [
+        ".dockerignore omits .env, *.pem and test.db; Dockerfile:12 is COPY . .",
+        "No USER directive; gcc retained in the final layer",
+        ".env holds a live-format Slack webhook, a Gmail app password, an OTX API key, SECRET_KEY and KIBANA_SYSTEM_PASSWORD",
+        "Verified: .env and sentinel.pem were never committed to git"
+      ],
+      "impact": "Anyone able to pull the image reads all five secrets plus an unencrypted RSA private key.",
+      "recommended_fix": "Add .env, *.pem, test.db to .dockerignore; add a non-root USER; multi-stage build; rotate the secrets.",
+      "severity": "HIGH",
+      "confidence": "CONFIRMED",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "Static inspection; see FINDINGS.md for detail.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_AUDIT.md."
+    },
+    {
+      "id": "SEC-006",
+      "title": "JWT stored in a JavaScript-readable cookie for 30 days",
+      "category": "authentication",
+      "locations": [
+        "website/lib/server-auth-cookies.ts:36",
+        "website/lib/server-auth-cookies.ts:44",
+        "website/lib/auth-cookies.ts:49",
+        "website/lib/auth-cookies.ts:61-62",
+        "website/middleware.ts:5-9"
+      ],
+      "evidence": [
+        "httpOnly: false with the comment 'Allow client-side access'",
+        "Secure omitted when protocol is not https",
+        "middleware.ts checks cookie presence only - any string passes"
+      ],
+      "impact": "Any XSS yields full account takeover for 30 days; token crosses the wire in cleartext given nginx is HTTP-only.",
+      "recommended_fix": "httpOnly cookies with a server-side exchange; Secure always; shorter lifetime; add CSP.",
+      "severity": "HIGH",
+      "confidence": "CONFIRMED",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "Static inspection; see FINDINGS.md for detail.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_AUDIT.md."
+    },
+    {
+      "id": "SEC-007",
+      "title": "User enumeration oracle on /forgot-password",
+      "category": "information-disclosure",
+      "locations": [
+        "app/api/users.py:88-108"
+      ],
+      "evidence": [
+        "Runtime with SMTP unreachable: existing email -> HTTP 500, unknown email -> HTTP 200",
+        "Contradicts the code's own comment at users.py:89"
+      ],
+      "impact": "Reliable account enumeration, feeding the SEC-003 takeover chain.",
+      "recommended_fix": "Identical 200 response on all paths; queue mail asynchronously; log failures server-side.",
+      "severity": "HIGH",
+      "confidence": "CONFIRMED",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "Static inspection; see FINDINGS.md for detail.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_AUDIT.md."
+    },
+    {
+      "id": "SEC-008",
+      "title": "Elasticsearch and Kibana are unauthenticated in all Kubernetes manifests",
+      "category": "authorization",
+      "locations": [
+        "k8s/base/elasticsearch.yaml:71-72",
+        "k8s/base/kibana.yaml:12",
+        "k8s/base/kibana.yaml:43-44",
+        "k8s/base/ingress.yaml:111-119",
+        "k8s/base/ingress.yaml:8-9"
+      ],
+      "evidence": [
+        "xpack.security.enabled set to 'false' in both manifests",
+        "ingress.yaml defines a kibana-loadbalancer with no tls: block and ssl-redirect disabled",
+        "Note: ingress.yaml is excluded from kustomization.yaml:18, so the LoadBalancer is not applied by default"
+      ],
+      "impact": "Anyone reaching the service reads and writes all security indices and Kibana saved objects.",
+      "recommended_fix": "Enable xpack security in k8s; add NetworkPolicies; authenticate Kibana; add TLS.",
+      "severity": "HIGH",
+      "confidence": "CONFIRMED",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "Static inspection; see FINDINGS.md for detail.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_AUDIT.md."
+    },
+    {
+      "id": "SEC-009",
+      "title": "Packetbeat captures full HTTP request and response bodies including credentials",
+      "category": "data-exposure",
+      "locations": [
+        "packetbeat/packetbeat.yml:17-18",
+        "packetbeat/packetbeat.yml:14",
+        "packetbeat/packetbeat.yml:78-79"
+      ],
+      "evidence": [
+        "send_request: true and send_response: true for ports [80,8080,8002,5000,9200]",
+        "Output to Logstash with no credentials and no TLS"
+      ],
+      "impact": "Login bodies (username+password), Authorization headers and reset OTPs are captured verbatim and indexed, turning the monitoring layer into a plaintext credential store.",
+      "recommended_fix": "Disable body capture; exclude the application's own ports; redact headers; enable TLS and auth on the output.",
+      "severity": "HIGH",
+      "confidence": "CONFIRMED",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "Static inspection; see FINDINGS.md for detail.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_AUDIT.md."
+    },
+    {
+      "id": "SEC-010",
+      "title": "No TLS anywhere in the shipped topology",
+      "category": "cryptography",
+      "locations": [
+        "nginx/nginx.conf:32",
+        "kibana/kibana.yml:4",
+        "docker-compose.yml:50-51",
+        "k8s/base/ingress.yaml"
+      ],
+      "evidence": [
+        "nginx listens on 80 only - no ssl_certificate, no 443 server, no redirect, no HSTS",
+        "ES http and transport SSL disabled",
+        "Logstash inputs have no ssl_enabled",
+        "next.config.mjs:36 sends HSTS the server cannot honour"
+      ],
+      "impact": "JWTs, passwords, OTPs, elastic123 and all telemetry cross every hop in cleartext.",
+      "recommended_fix": "Terminate TLS at nginx/ALB; redirect 80->443; enable TLS on ES, Logstash and beats.",
+      "severity": "HIGH",
+      "confidence": "CONFIRMED",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "Static inspection; see FINDINGS.md for detail.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_AUDIT.md."
+    },
+    {
+      "id": "ALERT-001",
+      "title": "Security alerting is a hardcoded placeholder; alerts reach nobody",
+      "category": "correctness",
+      "locations": [
+        "app/services/alerting.py:17",
+        "app/services/alerting.py:35",
+        "app/services/alerting.py:37-38",
+        "app/services/alerting.py:40-59",
+        "app/api/security.py:53"
+      ],
+      "evidence": [
+        "Webhook defaults to https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK and the only caller passes one argument",
+        "SLACK_WEBHOOK_URL exists in .env:30 but is not declared in app/config.py and is read by no Python code",
+        "send_email_alert builds a MIMEText and never sends it"
+      ],
+      "impact": "Every alert posts to a non-existent URL and the failure is swallowed. Combined with FUNC-001 the detect-to-alert pipeline is non-functional end to end.",
+      "recommended_fix": "Read the webhook from config; fail loudly when unset; implement or delete the email path.",
+      "severity": "HIGH",
+      "confidence": "CONFIRMED",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "Static inspection; see FINDINGS.md for detail.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_AUDIT.md."
+    },
+    {
+      "id": "SEC-011",
+      "title": "No application rate limiting; nginx auth_limit declared but never applied",
+      "category": "rate-limiting",
+      "locations": [
+        "nginx/nginx.conf:15-17",
+        "nginx/nginx.conf:92",
+        "app/"
+      ],
+      "evidence": [
+        "Only api_limit is applied, to /backend/; auth_limit and general_limit are referenced by no location",
+        "Runtime: 50 logins + 60 OTP guesses produced zero 429s",
+        "docker-compose publishes the backend on 0.0.0.0:8000, bypassing nginx entirely"
+      ],
+      "impact": "Credential stuffing, OTP brute force, email bombing and expensive-endpoint abuse are unthrottled.",
+      "recommended_fix": "Apply auth_limit to the auth endpoints; add application-layer per-account limiting; stop publishing port 8000.",
+      "severity": "HIGH",
+      "confidence": "CONFIRMED",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "Static inspection; see FINDINGS.md for detail.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_AUDIT.md."
+    },
+    {
+      "id": "DEP-001",
+      "title": "50 known vulnerabilities across 9 Python dependencies; multipart DoS reachable pre-auth",
+      "category": "dependencies",
+      "locations": [
+        "requirements.txt"
+      ],
+      "evidence": [
+        "pip-audit: 50 vulnerabilities in 9 packages",
+        "python-multipart 0.0.6 (8 advisories) and starlette 0.27.0 (10) parse the unauthenticated login form at app/api/users.py:41",
+        "python-jose 3.3.0 PYSEC-2024-233 reachable on every authenticated request",
+        "Triaged NOT exploitable: PYSEC-2024-232 algorithm confusion - auth.py:36 pins algorithms; ecdsa - HS256 only"
+      ],
+      "impact": "Unauthenticated DoS against the login endpoint, which has no rate limiting.",
+      "recommended_fix": "Upgrade python-multipart, starlette, fastapi, python-jose.",
+      "severity": "HIGH",
+      "confidence": "CONFIRMED",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "Static inspection; see FINDINGS.md for detail.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_AUDIT.md."
+    },
+    {
+      "id": "DEP-003",
+      "title": "npm ci fails; production build is not reproducible",
+      "category": "dependencies",
+      "locations": [
+        "website/package.json:40",
+        "website/package.json:47",
+        "website/package.json:61",
+        "website/package.json:64",
+        "website/Dockerfile:9"
+      ],
+      "evidence": [
+        "npm ci -> ERESOLVE: vaul@0.9.9 peer react ^16.8||^17||^18 vs react 19.2.0",
+        "Dockerfile uses npm i -f, overriding peer resolution and shipping vaul against an unsupported React major",
+        "Four dependencies pinned to the floating tag 'latest'"
+      ],
+      "impact": "Two builds of the same commit can differ; a compromised upstream release is pulled automatically.",
+      "recommended_fix": "Resolve or replace vaul; pin exact versions; restore npm ci.",
+      "severity": "HIGH",
+      "confidence": "CONFIRMED",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "Static inspection; see FINDINGS.md for detail.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_AUDIT.md."
+    },
+    {
+      "id": "SEC-012",
+      "title": "Password change does not invalidate existing JWTs",
+      "locations": [
+        "app/api/auth.py:15-23",
+        "app/api/users.py:111-129"
+      ],
+      "evidence": [
+        "Runtime: token issued, password changed in DB, same token still returned 200 on /users/me"
+      ],
+      "impact": "A stolen token survives a password reset; 30 min in .env, 30 days in k8s.",
+      "recommended_fix": "Add a token version or password_changed_at claim; add logout and a denylist.",
+      "confidence": "CONFIRMED",
+      "severity": "MEDIUM",
+      "category": "correctness",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "See FINDINGS.md.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_GAPS.md."
+    },
+    {
+      "id": "SEC-013",
+      "title": "Login timing oracle enables account enumeration",
+      "locations": [
+        "app/crud/user.py:43-49"
+      ],
+      "evidence": [
+        "Returns at :46 for an unknown user without performing any bcrypt work"
+      ],
+      "impact": "Response-time difference of a full bcrypt cost-12 computation distinguishes existing accounts.",
+      "recommended_fix": "Always compare against a dummy hash.",
+      "confidence": "HIGH",
+      "severity": "MEDIUM",
+      "category": "correctness",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "See FINDINGS.md.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_GAPS.md."
+    },
+    {
+      "id": "OPS-002",
+      "title": "/health returns 200 when unhealthy and leaks a DB connection per probe",
+      "locations": [
+        "app/main.py:67-84",
+        "app/main.py:71"
+      ],
+      "evidence": [
+        "Runtime with Redis down: HTTP/1.1 200 OK body {'status':'unhealthy','database':'ok','redis':'error'}",
+        "engine.connect() is never closed and is not a context manager"
+      ],
+      "impact": "Kubernetes probes can never fail, so a broken pod is never restarted - while the same endpoint exhausts the connection pool.",
+      "recommended_fix": "Return 503 when unhealthy; use with engine.connect().",
+      "confidence": "CONFIRMED",
+      "severity": "MEDIUM",
+      "category": "correctness",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "See FINDINGS.md.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_GAPS.md."
+    },
+    {
+      "id": "BUG-001",
+      "title": "Todo statistics cache is never invalidated",
+      "locations": [
+        "app/api/todos.py:57",
+        "app/api/todos.py:97-98",
+        "app/api/todos.py:114-115",
+        "app/api/todos.py:144"
+      ],
+      "evidence": [
+        "Runtime with live Redis: stats reported total_todos=1 after a create while GET /todos/ returned 2 items"
+      ],
+      "impact": "Users see stale statistics for up to 120 seconds.",
+      "recommended_fix": "Delete stats:user:{id} in create/update/delete.",
+      "confidence": "CONFIRMED",
+      "severity": "MEDIUM",
+      "category": "correctness",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "See FINDINGS.md.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_GAPS.md."
+    },
+    {
+      "id": "SEC-015",
+      "title": "Validation errors echo rejected values to the client and to Elasticsearch",
+      "locations": [
+        "app/exceptions.py:71-80",
+        "app/logging_config.py:23-29"
+      ],
+      "evidence": [
+        "Runtime: POST /users/reset-password with non-string otp/new_password returned and logged 'input': 123456 and 'input': 55512345",
+        "SCOPE CORRECTED: the broader claim that any validation failure leaks the password was tested and DISPROVED - input is per-field and password/otp are unconstrained str, so only type-validation failures leak"
+      ],
+      "impact": "Secret-bearing values reach the SIEM and the client on malformed input.",
+      "recommended_fix": "Strip input/ctx from logged and returned payloads; add a structlog redaction processor.",
+      "confidence": "CONFIRMED",
+      "severity": "MEDIUM",
+      "category": "correctness",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "See FINDINGS.md.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_GAPS.md."
+    },
+    {
+      "id": "SEC-016",
+      "title": "SMTP TLS unverified and untimed; blocking call in an async path; HTML injection into email",
+      "locations": [
+        "app/services/email_service.py:32-34",
+        "app/services/email_service.py:38",
+        "app/services/email_service.py:68",
+        "app/services/email_service.py:43"
+      ],
+      "evidence": [
+        "starttls() without an SSL context - no certificate verification",
+        "smtplib.SMTP constructed without a timeout",
+        "user.username f-string-interpolated unescaped into HTML email",
+        "Errors print() to stdout, bypassing the log pipeline"
+      ],
+      "impact": "MITM of the mail session can capture the Gmail app password; a hung SMTP server blocks the entire event loop indefinitely.",
+      "recommended_fix": "ssl.create_default_context(); explicit timeout; background queue; escape template values.",
+      "confidence": "HIGH",
+      "severity": "MEDIUM",
+      "category": "correctness",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "See FINDINGS.md.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_GAPS.md."
+    },
+    {
+      "id": "DATA-001",
+      "title": "Alembic migration is Postgres-only and is never exercised by tests",
+      "locations": [
+        "alembic/versions/844a86b079e6_initial_migration_users_todos_and_.py",
+        "tests/conftest.py:27",
+        "alembic/env.py:54-59"
+      ],
+      "evidence": [
+        "alembic upgrade head against SQLite fails: server_default=func.now() emits DEFAULT now()",
+        "Tests use Base.metadata.create_all, so they validate models and never the migration",
+        "Model-vs-migration comparison showed no drift today",
+        "env.py sets neither compare_type nor compare_server_default"
+      ],
+      "impact": "The migration could break entirely and the test suite would stay green.",
+      "recommended_fix": "Run migrations against Postgres in CI and assert the schema matches the models.",
+      "confidence": "CONFIRMED",
+      "severity": "MEDIUM",
+      "category": "correctness",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "See FINDINGS.md.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_GAPS.md."
+    },
+    {
+      "id": "PERF-001",
+      "title": "Blocking synchronous I/O throughout async handlers",
+      "locations": [
+        "app/cache.py:14-56",
+        "app/services/security_logger.py",
+        "app/services/threat_detection.py",
+        "app/services/alerting.py:35",
+        "app/services/email_service.py:32-39",
+        "app/main.py:75"
+      ],
+      "evidence": [
+        "Sync redis, elasticsearch, requests and smtplib clients all called inside async def",
+        "smtplib.SMTP has no timeout, so /forgot-password can stall the event loop indefinitely"
+      ],
+      "impact": "Concurrent requests serialise behind every external call; one hung SMTP connection stalls the whole process.",
+      "recommended_fix": "redis.asyncio, AsyncElasticsearch, httpx.AsyncClient; background queue for SMTP; explicit timeouts.",
+      "confidence": "HIGH",
+      "severity": "MEDIUM",
+      "category": "correctness",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "See FINDINGS.md.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_GAPS.md."
+    },
+    {
+      "id": "PERF-002",
+      "title": "Redis KEYS used for cache invalidation on every write; unbounded key growth from user input",
+      "locations": [
+        "app/cache.py:41-49",
+        "app/api/todos.py:25",
+        "app/api/todos.py:57"
+      ],
+      "evidence": [
+        "KEYS is O(N) and blocks the Redis server; called on every todo create/update/delete",
+        "The raw search parameter is interpolated into the cache key with no bound"
+      ],
+      "impact": "Redis-wide latency spikes; a memory-exhaustion path via arbitrary search strings.",
+      "recommended_fix": "Use SCAN or a per-user key set; hash the filter component of the key.",
+      "confidence": "HIGH",
+      "severity": "MEDIUM",
+      "category": "correctness",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "See FINDINGS.md.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_GAPS.md."
+    },
+    {
+      "id": "SEC-014",
+      "title": "/metrics is unauthenticated with unbounded Prometheus label cardinality",
+      "locations": [
+        "app/main.py:84-89",
+        "app/middleware.py:55",
+        "app/middleware.py:61"
+      ],
+      "evidence": [
+        "Runtime: GET /metrics -> 200 with no auth",
+        "endpoint label uses the raw request path, so every todo id creates a new time series"
+      ],
+      "impact": "Operational intelligence disclosure plus an anonymous memory-exhaustion vector.",
+      "recommended_fix": "Authenticate or bind internally; label by route template.",
+      "confidence": "CONFIRMED",
+      "severity": "MEDIUM",
+      "category": "correctness",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "See FINDINGS.md.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_GAPS.md."
+    },
+    {
+      "id": "K8S-001",
+      "title": "Logstash mounts a developer's absolute hostPath; the pod cannot start",
+      "locations": [
+        "k8s/base/logstash.yaml:81-84",
+        "k8s/base/postgres.yaml:14",
+        "k8s/base/redis.yaml:14",
+        "k8s/base/elasticsearch.yaml:14"
+      ],
+      "evidence": [
+        "hostPath /home/rcsen/Documents/sih25/ps25238/logstash/pipeline with type: Directory - a path that does not match this repository's name",
+        "PVs use hostPath under /tmp with Retain"
+      ],
+      "impact": "Logstash will not schedule on any other node; persistent data is node-local and lost to /tmp cleanup.",
+      "recommended_fix": "Ship the pipeline as a ConfigMap; use real StorageClasses.",
+      "confidence": "HIGH",
+      "severity": "MEDIUM",
+      "category": "correctness",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "See FINDINGS.md.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_GAPS.md."
+    },
+    {
+      "id": "K8S-002",
+      "title": "Privileged and root containers, host networking, cluster-wide RBAC, no securityContexts",
+      "locations": [
+        "k8s/base/elasticsearch.yaml:60-61",
+        "k8s/base/elasticsearch.yaml:55-56",
+        "k8s/base/beats.yaml:71-72",
+        "k8s/base/beats.yaml:232-233",
+        "k8s/base/beats.yaml:49",
+        "k8s/base/beats.yaml:209",
+        "k8s/base/beats.yaml:121-151"
+      ],
+      "evidence": [
+        "privileged: true initContainer; beats DaemonSets runAsUser 0 with hostNetwork: true and cluster-wide get/list/watch",
+        "No securityContext at all on postgres, redis, logstash, kibana, backend, frontend or migrate-job",
+        "No PodSecurity admission and no NetworkPolicy anywhere in the tree"
+      ],
+      "impact": "Compromise of either beats DaemonSet yields root on the host network with cluster-wide read.",
+      "recommended_fix": "Drop privileged; add restrictive securityContexts; scope RBAC; add NetworkPolicies.",
+      "confidence": "HIGH",
+      "severity": "MEDIUM",
+      "category": "correctness",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "See FINDINGS.md.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_GAPS.md."
+    },
+    {
+      "id": "CFG-001",
+      "title": "13 service ports published on 0.0.0.0 including password-less Redis and Postgres",
+      "locations": [
+        "docker-compose.yml",
+        "docker-compose.yml:34-36"
+      ],
+      "evidence": [
+        "docker compose config resolves published ports 80,514,3000,5000,5044,5432,5601,6379,8000,9200,9300,9600,12201 with no host_ip binding",
+        "Redis is started with no requirepass"
+      ],
+      "impact": "Direct network access to the database, cache and search cluster, and complete bypass of nginx rate limiting and routing.",
+      "recommended_fix": "Bind to 127.0.0.1 except nginx; set a Redis password.",
+      "confidence": "CONFIRMED",
+      "severity": "MEDIUM",
+      "category": "correctness",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "See FINDINGS.md.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_GAPS.md."
+    },
+    {
+      "id": "CORS-001",
+      "title": "Conflicting CORS policy between nginx and the application",
+      "locations": [
+        "app/middleware.py:67-73",
+        "nginx/nginx.conf:106-108"
+      ],
+      "evidence": [
+        "App allows hardcoded localhost origins with allow_credentials=True; nginx adds Access-Control-Allow-Origin: * on /backend/"
+      ],
+      "impact": "Browsers reject wildcard origin with credentials; duplicate headers are a protocol error. Deployed origins never match the hardcoded list.",
+      "recommended_fix": "Drive origins from configuration; set CORS headers in exactly one layer.",
+      "confidence": "HIGH",
+      "severity": "MEDIUM",
+      "category": "correctness",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "See FINDINGS.md.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_GAPS.md."
+    },
+    {
+      "id": "QA-001",
+      "title": "pytest.ini uses [tool:pytest] and is silently inert",
+      "locations": [
+        "pytest.ini:1"
+      ],
+      "evidence": [
+        "[tool:pytest] is valid only in setup.cfg",
+        "Verified: pytest reports configfile: pytest.ini but addopts = -v --tb=short does not take effect"
+      ],
+      "impact": "Any future --cov-fail-under or --strict-markers would be ignored silently.",
+      "recommended_fix": "Rename the section to [pytest].",
+      "confidence": "CONFIRMED",
+      "category": "testing",
+      "severity": "LOW",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "See FINDINGS.md.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_AUDIT.md."
+    },
+    {
+      "id": "QA-002",
+      "title": "TypeScript and ESLint errors suppressed at build time; 13 errors hidden",
+      "locations": [
+        "website/next.config.mjs:63-68",
+        "website/tsconfig.json:20",
+        "website/lib/store/todo-store.ts:45",
+        "website/lib/store/todo-store.ts:58",
+        "website/lib/store/todo-store.ts:73"
+      ],
+      "evidence": [
+        "tsc --noEmit reports 13 errors; 3 are genuine type-safety failures where apiCall is called without a type parameter so T widens to {}",
+        "strict is false across 9089 LOC"
+      ],
+      "impact": "state.todos.map() would throw if the API returned a non-array; there is no runtime validation.",
+      "recommended_fix": "Type apiCall<Todo[]>; validate responses; enable strict; remove the ignore flags.",
+      "confidence": "CONFIRMED",
+      "category": "code-quality",
+      "severity": "LOW",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "See FINDINGS.md.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_AUDIT.md."
+    },
+    {
+      "id": "CONTRACT-001",
+      "title": "id type disagrees across backend, frontend and documentation",
+      "locations": [
+        "app/models/todo.py:10",
+        "website/lib/store/todo-store.ts:7",
+        "docs/API_DOCUMENTATION.md:247-269"
+      ],
+      "evidence": [
+        "Runtime: backend returns an integer id",
+        "Frontend declares id: string; docs declare a UUID string",
+        "NO live bug today - both sides of todo.id === id are numbers at runtime"
+      ],
+      "impact": "Types are wrong; passing an id from a URL param (a string) would make the strict comparison silently fail.",
+      "recommended_fix": "Align the TypeScript type to number; correct the documentation.",
+      "confidence": "CONFIRMED",
+      "category": "contract",
+      "severity": "LOW",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "See FINDINGS.md.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_AUDIT.md."
+    },
+    {
+      "id": "QA-003",
+      "title": "Dead code and unused configuration throughout",
+      "locations": [
+        "app/services/email_service.py:123-133",
+        "app/services/security_logger.py:91-165",
+        "app/services/alerting.py:40-59",
+        "app/logging_config.py:46-49",
+        "app/exceptions.py:17-39",
+        "nginx/nginx.conf:16-17"
+      ],
+      "evidence": [
+        "cleanup_expired_tokens, log_api_access_event and send_email_alert are never called",
+        "hasattr on a declared pydantic field is always True, making the ConsoleRenderer branch unreachable",
+        "Five custom exception classes are never raised",
+        "auth_limit and general_limit zones are never applied",
+        "ruff: 14 unused imports, 5 unused variables"
+      ],
+      "impact": "password_reset_tokens grows without bound; maintenance burden and misleading code.",
+      "recommended_fix": "Delete or wire up each item; add bcrypt explicitly BEFORE removing the unused passlib.",
+      "confidence": "CONFIRMED",
+      "category": "maintainability",
+      "severity": "LOW",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "See FINDINGS.md.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_AUDIT.md."
+    },
+    {
+      "id": "QA-004",
+      "title": "test.db is tracked in git",
+      "locations": [
+        ".gitignore:15",
+        "test.db"
+      ],
+      "evidence": [
+        "Tracked despite the gitignore entry because it was committed first",
+        "VERIFIED: the file is an empty SQLite database with zero tables - no data exposure"
+      ],
+      "impact": "Repository hygiene only. Commit 6720579 claims to have removed it; it did not.",
+      "recommended_fix": "git rm --cached test.db.",
+      "confidence": "CONFIRMED",
+      "category": "hygiene",
+      "severity": "LOW",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "See FINDINGS.md.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_AUDIT.md."
+    },
+    {
+      "id": "DOC-001",
+      "title": "Operational identifiers and credentials published in documentation",
+      "locations": [
+        "docs/SECURITY_CREDENTIALS.md:18-19",
+        "docs/SECURITY_CREDENTIALS.md:161",
+        "BROWSER_MONITORING_SUCCESS.md:25-29",
+        "docs/KIBANA.md:78-80"
+      ],
+      "evidence": [
+        "A real-looking generated kibana_system password is published",
+        "A live ES cluster UUID, node id, Kibana alert-rule document ids and internal index names are pasted",
+        "The operator's workstation LAN IP 10.20.30.117 appears in an alert table"
+      ],
+      "impact": "Credential exposure and internal-topology disclosure in a public repository.",
+      "recommended_fix": "Redact; rotate the kibana_system password.",
+      "confidence": "CONFIRMED",
+      "category": "secrets",
+      "severity": "LOW",
+      "component": "various",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "See FINDINGS.md.",
+      "documentation_impact": "See AUDIT/DOCUMENTATION_AUDIT.md."
+    },
+    {
+      "id": "INFO-001",
+      "title": "Route-ordering hazard in the todos router",
+      "locations": [
+        "app/api/todos.py:63",
+        "app/api/todos.py:121"
+      ],
+      "evidence": [
+        "/{todo_id} is declared before /stats/summary; verified /stats/summary still returns 200 because the paths differ in segment count"
+      ],
+      "impact": "GET /api/v1/todos/stats would 422 rather than 404. Cosmetic.",
+      "recommended_fix": "Declare static routes before parameterised ones.",
+      "severity": "INFO",
+      "confidence": "CONFIRMED",
+      "category": "informational",
+      "component": "backend",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "Runtime observation.",
+      "documentation_impact": "Minor."
+    },
+    {
+      "id": "INFO-002",
+      "title": "Trailing-slash behaviour differs from documentation",
+      "locations": [
+        "app/api/todos.py:15",
+        "docs/API_DOCUMENTATION.md:107"
+      ],
+      "evidence": [
+        "Runtime: GET /api/v1/todos -> 307 redirect; /api/v1/todos/ -> 200"
+      ],
+      "impact": "Client-integration trap; the frontend uses the correct form.",
+      "recommended_fix": "Document the trailing slash or set redirect_slashes behaviour explicitly.",
+      "severity": "INFO",
+      "confidence": "CONFIRMED",
+      "category": "informational",
+      "component": "backend",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "Runtime observation.",
+      "documentation_impact": "Minor."
+    },
+    {
+      "id": "INFO-003",
+      "title": "root_path is hardcoded to /backend",
+      "locations": [
+        "app/main.py:38"
+      ],
+      "evidence": [
+        "Observed in logs during the audit: a request to /health logged as http://127.0.0.1:8099/backend/health"
+      ],
+      "impact": "OpenAPI and logged paths carry /backend even when run directly.",
+      "recommended_fix": "Drive root_path from configuration.",
+      "severity": "INFO",
+      "confidence": "CONFIRMED",
+      "category": "informational",
+      "component": "backend",
+      "actual_behavior": "",
+      "expected_behavior": "",
+      "validation": "Runtime observation.",
+      "documentation_impact": "Minor."
+    }
+  ]
+}
