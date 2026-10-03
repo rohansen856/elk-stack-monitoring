@@ -5,14 +5,22 @@ metadata:
   namespace: threat-detection
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
-    nginx.ingress.kubernetes.io/ssl-redirect: "false"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
     nginx.ingress.kubernetes.io/proxy-body-size: "100m"
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
 spec:
   ingressClassName: nginx
+  tls:
+    # Create the secret from a real certificate, or issue one with cert-manager:
+    #   kubectl create secret tls threat-detection-tls \
+    #     --cert=tls.crt --key=tls.key -n threat-detection
+    - hosts:
+        - threat-detection.local
+        - kibana.threat-detection.local
+      secretName: threat-detection-tls
   rules:
   - host: threat-detection.local
     http:
@@ -73,7 +81,7 @@ metadata:
   annotations:
     metallb.universe.tf/allow-shared-ip: "threat-detection-shared"
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: frontend
   ports:
@@ -91,7 +99,7 @@ metadata:
   annotations:
     metallb.universe.tf/allow-shared-ip: "threat-detection-shared"
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: backend
   ports:
@@ -101,15 +109,9 @@ spec:
     name: http
 
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: kibana-loadbalancer
-  namespace: threat-detection
-  annotations:
-    metallb.universe.tf/allow-shared-ip: "threat-detection-shared"
-spec:
-  type: LoadBalancer
+# The kibana-loadbalancer Service was removed: it placed Kibana directly on
+# a public IP over plain HTTP. Reach Kibana through the ingress instead,
+# which terminates TLS. See AUDIT SEC-008.
   selector:
     app: kibana
   ports:
