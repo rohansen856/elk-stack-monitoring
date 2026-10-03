@@ -114,6 +114,14 @@ metadata:
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
+# NOTE on scope: these ClusterRoles grant read-only (get/list/watch) access to
+# nodes, namespaces, pods and replicasets cluster-wide. That breadth is what
+# Beats' Kubernetes autodiscovery requires to attach pod metadata to events; it
+# is the upstream-recommended set and is not reducible without losing
+# enrichment. The meaningful hardening for these DaemonSets is that they run
+# with hostNetwork and as root - see AUDIT K8S-002 - which is inherent to
+# host-level log and metric collection. Restrict by not scheduling them on
+# nodes that do not need collection.
 kind: ClusterRole
 metadata:
   name: filebeat
