@@ -15,7 +15,11 @@ resources:
   - backend.yaml
   - frontend.yaml
   - beats.yaml
-  # - ingress.yaml  # Commented out due to ingress controller issues
+  - networkpolicy.yaml
+  # ingress.yaml is intentionally opt-in: it needs an ingress controller
+  # and a TLS secret. Apply it separately once those exist:
+  #   kubectl apply -f k8s/base/ingress.yaml
+  # - ingress.yaml
 
 # The Logstash pipeline is generated from the real files in the repository
 # rather than mounted from a host path that only exists on one workstation.

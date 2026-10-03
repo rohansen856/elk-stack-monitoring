@@ -1,0 +1,54 @@
+# Default-deny ingress for the namespace, with explicit allows.
+# There were previously no NetworkPolicies at all, so any pod could reach the
+# database, cache and Elasticsearch directly. See AUDIT K8S-002.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: threat-detection
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-to-datastores
+  namespace: threat-detection
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: [postgres, redis, elasticsearch]
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values: [backend, migrate, logstash, kibana, filebeat, metricbeat]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-frontends
+  namespace: threat-detection
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: [frontend, backend, kibana]
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+        - podSelector: {}
