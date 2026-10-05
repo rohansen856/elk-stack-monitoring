@@ -1,13 +1,42 @@
 services:
+  # Generates a self-signed TLS certificate on first run so the stack is
+  # usable immediately. Replace nginx/certs with a real certificate for any
+  # deployment that matters.
+  cert-init:
+    image: alpine/openssl:latest
+    volumes:
+      - ./nginx/certs:/certs
+    entrypoint:
+      - sh
+      - -c
+      - |
+        if [ -f /certs/server.crt ] && [ -f /certs/server.key ]; then
+          echo "TLS certificate already present; leaving it alone."
+        else
+          echo "Generating a self-signed development certificate..."
+          openssl req -x509 -nodes -newkey rsa:2048 \
+            -keyout /certs/server.key -out /certs/server.crt \
+            -days 365 -subj "/CN=localhost" \
+            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+          chmod 644 /certs/server.crt /certs/server.key
+          echo "Done."
+        fi
+    restart: "no"
+
   nginx:
     image: nginx:alpine
     ports:
-      - "80:80"
-      - "443:443"
+      - "${NGINX_BIND:-127.0.0.1}:80:80"
+      - "${NGINX_BIND:-127.0.0.1}:443:443"
     depends_on:
-      - frontend
-      - app
-      - kibana
+      cert-init:
+        condition: service_completed_successfully
+      frontend:
+        condition: service_started
+      app:
+        condition: service_started
+      kibana:
+        condition: service_started
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       # TLS material. Generate a development certificate first:
@@ -16,7 +45,7 @@ services:
       #     -days 365 -subj "/CN=localhost"
       - ./nginx/certs:/etc/nginx/certs:ro
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/nginx-health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/nginx-health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -86,7 +115,11 @@ services:
 
   logstash:
     image: docker.elastic.co/logstash/logstash:8.11.0
+    env_file:
+      - ./.env
     environment:
+      # Referenced by logstash/pipeline/*.conf as ${ELASTIC_PASSWORD}.
+      - "ELASTIC_PASSWORD=${ELASTIC_PASSWORD:?ELASTIC_PASSWORD must be set in .env}"
       - "LS_JAVA_OPTS=-Xmx256m -Xms256m"
       - "XPACK_MONITORING_ENABLED=true"
       - "XPACK_MONITORING_ELASTICSEARCH_HOSTS=http://elasticsearch:9200"
@@ -121,8 +154,6 @@ services:
     depends_on:
       elasticsearch:
         condition: service_healthy
-    volumes:
-      - ./kibana/kibana.yml:/kibana-config/kibana.yml
     entrypoint: /bin/bash
     command:
       - -c
@@ -148,7 +179,9 @@ services:
 
         if [ "$$http_code" -eq 200 ]; then
           echo '✓ kibana_system password set'
-          sed -i "s|elasticsearch.password:.*|elasticsearch.password: \"$${KIBANA_SYSTEM_PASSWORD}\"|g" /kibana-config/kibana.yml 2>/dev/null || true
+          # kibana.yml reads ${KIBANA_SYSTEM_PASSWORD} from the environment, so
+          # there is nothing to rewrite. Editing it here previously mutated a
+          # tracked file in the working tree through the bind mount.
         else
           echo "WARNING: Failed to set password (HTTP $$http_code)"
         fi
@@ -192,18 +225,23 @@ services:
 
   kibana:
     image: docker.elastic.co/kibana/kibana:8.11.0
-    env_file:
-      - ./.env
+    # Deliberately NOT env_file: ./.env - Kibana maps ELASTICSEARCH_USERNAME
+    # straight onto elasticsearch.username, and .env sets that to `elastic`
+    # for the application. Kibana refuses to start as the superuser
+    # ("value of elastic is forbidden"), so only the variables it should see
+    # are passed explicitly below.
     ports:
       - "127.0.0.1:5601:5601"
     volumes:
       - ./kibana/kibana.yml:/usr/share/kibana/config/kibana.yml
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=kibana_system
+      - ELASTICSEARCH_PASSWORD=${KIBANA_SYSTEM_PASSWORD:?KIBANA_SYSTEM_PASSWORD must be set in .env}
       - XPACK_SECURITY_ENABLED=true
-      - XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY=a7a6311933d3503b89bc8d0a98d7e6f8d4c5e7f8a9b3c2d1e5f6g7h8i9j0k1l2
-      - XPACK_REPORTING_ENCRYPTIONKEY=b8b7412844e4614c9acde1b1ac8ef7g9e5d6f8a9b3c2d1e5f6g7h8i9j0k1l2m3n4
-      - XPACK_SECURITY_ENCRYPTIONKEY=c9c8523955f5725dabe2c2bd9f0g8ha6f7e8c2d1e5f6g7h8i9j0k1l2m3n4o5p6
+      - XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY=${KIBANA_SAVEDOBJECTS_KEY:?KIBANA_SAVEDOBJECTS_KEY must be set in .env}
+      - XPACK_REPORTING_ENCRYPTIONKEY=${KIBANA_REPORTING_KEY:?KIBANA_REPORTING_KEY must be set in .env}
+      - XPACK_SECURITY_ENCRYPTIONKEY=${KIBANA_ENCRYPTION_KEY:?KIBANA_ENCRYPTION_KEY must be set in .env}
     depends_on:
       setup-elk:
         condition: service_completed_successfully
@@ -220,6 +258,8 @@ services:
     image: docker.elastic.co/beats/filebeat:8.11.0
     user: root
     environment:
+      # Referenced by filebeat.yml as ${ELASTIC_PASSWORD}.
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:?ELASTIC_PASSWORD must be set in .env}
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
       - KIBANA_HOST=http://kibana:5601
     volumes:
@@ -243,6 +283,8 @@ services:
     image: docker.elastic.co/beats/metricbeat:8.11.0
     user: root
     environment:
+      # Referenced by metricbeat.yml as ${ELASTIC_PASSWORD}.
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:?ELASTIC_PASSWORD must be set in .env}
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
       - KIBANA_HOST=http://kibana:5601
     volumes:
@@ -347,7 +389,7 @@ services:
     depends_on:
       - app
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000/frontend"]
       interval: 30s
       timeout: 10s
       retries: 3
