@@ -1,9 +1,9 @@
 # Kibana configuration for production environment
 server.host: "0.0.0.0"
 server.shutdownTimeout: "5s"
+# Credentials and hosts come from the ELASTICSEARCH_* environment variables
+# set in docker-compose.yml, so nothing sensitive lives in this file.
 elasticsearch.hosts: ["http://elasticsearch:9200"]
-elasticsearch.username: "kibana_system"
-elasticsearch.password: "${KIBANA_SYSTEM_PASSWORD}"
 monitoring.ui.container.elasticsearch.enabled: true
 
 # Security features
