@@ -35,10 +35,8 @@ const nextConfig = {
           key: 'Permissions-Policy',
           value: 'geolocation=(), microphone=(), camera=()',
         },
-        {
-          key: 'Strict-Transport-Security',
-          value: 'max-age=31536000; includeSubDomains',
-        },
+          // Strict-Transport-Security is set by nginx, which terminates TLS.
+          // Emitting it here as well produced a duplicate header.
       ],
     },
     {
