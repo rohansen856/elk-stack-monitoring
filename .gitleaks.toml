@@ -20,4 +20,10 @@ regexes = [
 paths = [
   # Historical audit record: it quotes the values it found, by design.
   '''AUDIT/.*''',
+  # .env.example intentionally ships real, randomly generated DEVELOPMENT
+  # credentials so `cp .env.example .env && docker compose up -d` works with no
+  # further steps. They are documented as dev-only and must be regenerated
+  # before any real deployment. The real .env is gitignored and never committed.
+  # This allowlist covers the example file ONLY - every other path is scanned.
+  '''^\.env\.example$''',
 ]
