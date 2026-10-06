@@ -47,30 +47,49 @@ A comprehensive cybersecurity platform that combines task management with advanc
 2. **Configure environment**
    ```bash
    cp .env.example .env
-   # Edit .env if needed (default settings work for development)
+   cp website/.env.example website/.env
    ```
+   The example files contain working, randomly generated development
+   credentials, so the stack starts as-is. **Regenerate every secret before
+   exposing this anywhere** - see the header of `.env.example`. There are no
+   fallback defaults: if a value is missing the stack refuses to start rather
+   than using a known password.
 
 3. **Start all services**
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
-   > **Note**: Database migrations now run automatically! No manual steps needed.
+   Database migrations run automatically, and a self-signed TLS certificate is
+   generated on first run.
 
-4. **Wait for services to start** (optional verification)
+4. **Wait for services to become healthy**
    ```bash
-   # Check all services are running
-   docker-compose ps
+   docker compose ps
+   ```
+   All of `db`, `redis`, `elasticsearch`, `logstash`, `kibana`, `app`,
+   `frontend` and `nginx` should report `(healthy)`. Elasticsearch and Kibana
+   take the longest, typically under two minutes.
 
-   # Check service health
-   curl http://localhost:8000/health
-   curl http://localhost:9200/_cluster/health
+5. **Access the application**
+
+   Everything is served through nginx over HTTPS. The certificate is
+   self-signed, so your browser will warn once, and `curl` needs `-k`.
+
+   | Service | URL |
+   |---|---|
+   | Frontend dashboard | https://localhost/frontend |
+   | Backend API | https://localhost/backend/api/v1/ |
+   | API health | https://localhost/backend/health |
+   | API docs (non-production only) | https://localhost/backend/docs |
+   | Kibana | https://localhost/monitoring |
+
+   ```bash
+   curl -k https://localhost/backend/health
+   # {"status":"healthy","database":"ok","redis":"ok"}
    ```
 
-5. **Access the applications**
-   - **Frontend Dashboard**: http://localhost:3000
-   - **API Documentation**: http://localhost:8000/docs
-   - **Kibana Security Dashboard**: http://localhost:5601
-   - **API Health Check**: http://localhost:8000/health
+   Ports bind to `127.0.0.1` by default so a local stack is not exposed to your
+   network. Set `NGINX_BIND=0.0.0.0` in `.env` to publish it deliberately.
 
 ## 🎯 What's Included
 
