@@ -339,8 +339,10 @@ services:
         condition: service_healthy
       kibana:
         condition: service_healthy
+      # Healthy, not merely started: the beats input opens well after the
+      # container starts, and Packetbeat logged publish errors until it did.
       logstash:
-        condition: service_started
+        condition: service_healthy
     environment:
       - ELASTICSEARCH_HOSTS=http://localhost:9200
       - ELASTICSEARCH_USERNAME=elastic
