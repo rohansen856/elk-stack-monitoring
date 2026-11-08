@@ -314,7 +314,8 @@ services:
         condition: service_healthy
       kibana:
         condition: service_healthy
-    command: metricbeat -e -strict.perms=false
+    # -system.hostfs makes the system module report the host, not the container.
+    command: metricbeat -e -strict.perms=false -system.hostfs=/hostfs
     restart: no
     networks:
       - default
