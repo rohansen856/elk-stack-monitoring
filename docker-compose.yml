@@ -388,6 +388,14 @@ services:
         condition: service_healthy
       logstash:
         condition: service_healthy
+    environment:
+      # Uvicorn only honours X-Forwarded-For from trusted peers (default:
+      # 127.0.0.1), so every request appeared to come from the nginx or
+      # frontend container. Rate limits were therefore global, and security
+      # events blamed one internal IP. The app port is only reachable from the
+      # compose network and loopback, and nginx overwrites X-Forwarded-For
+      # with the real client address, so trusting peers here is safe.
+      FORWARDED_ALLOW_IPS: "*"
     command:
       [
         "uvicorn",
