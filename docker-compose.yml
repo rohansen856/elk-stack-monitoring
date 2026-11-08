@@ -367,8 +367,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - .:/app
+    # Runs the migrations baked into the image. A `.:/app` bind mount used to
+    # replace the image contents with the working tree, so a migration could
+    # run against code that was never built or reviewed.
     command: ["alembic", "upgrade", "head"]
     restart: "no"
 
