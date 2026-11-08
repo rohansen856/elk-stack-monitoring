@@ -183,7 +183,10 @@ services:
           # there is nothing to rewrite. Editing it here previously mutated a
           # tracked file in the working tree through the bind mount.
         else
-          echo "WARNING: Failed to set password (HTTP $$http_code)"
+          # Fail hard: continuing let Kibana start with a password Elasticsearch
+          # rejects, which surfaced later as an opaque Kibana auth loop.
+          echo "ERROR: Failed to set kibana_system password (HTTP $$http_code)"
+          exit 1
         fi
 
         # 2. Create Filebeat index template
