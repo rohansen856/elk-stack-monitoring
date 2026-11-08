@@ -189,39 +189,52 @@ services:
           exit 1
         fi
 
-        # 2. Create Filebeat index template
-        echo 'Setting up Filebeat index template...'
-        curl -s -X PUT "http://elasticsearch:9200/_index_template/filebeat" \
+        # 2. Index template for Sentinel security event indices.
+        # Without it every field was dynamically mapped as text, so IP range
+        # queries compared strings ("10.3.0.1" sorted outside 10.0.0.0/8) and
+        # aggregations on source.ip/src_ip were impossible.
+        echo 'Setting up Sentinel security event index template...'
+        code=$$(curl -s -o /dev/null -w '%{http_code}' -X PUT \
+          "http://elasticsearch:9200/_index_template/sentinel-security-events" \
           -u "elastic:$${ELASTIC_PASSWORD}" \
           -H "Content-Type: application/json" \
           -d '{
-            "index_patterns": ["filebeat-*", "security-logs*"],
-            "data_stream": {},
-            "priority": 200,
+            "index_patterns": ["security-*-logs-*", "security-threats-*", "security-alerts-*"],
+            "priority": 300,
             "template": {
-              "settings": {
-                "number_of_shards": 1,
-                "number_of_replicas": 0
+              "settings": { "number_of_shards": 1, "number_of_replicas": 0 },
+              "mappings": {
+                "properties": {
+                  "@timestamp":  { "type": "date" },
+                  "src_ip":      { "type": "ip", "ignore_malformed": true },
+                  "source":      { "properties": {
+                    "ip":    { "type": "ip", "ignore_malformed": true },
+                    "port":  { "type": "long", "ignore_malformed": true },
+                    "bytes": { "type": "long", "ignore_malformed": true } } },
+                  "destination": { "properties": {
+                    "ip":    { "type": "ip", "ignore_malformed": true },
+                    "port":  { "type": "long", "ignore_malformed": true },
+                    "bytes": { "type": "long", "ignore_malformed": true } } },
+                  "network":     { "properties": {
+                    "bytes":     { "type": "long", "ignore_malformed": true },
+                    "bytes_out": { "type": "long", "ignore_malformed": true } } },
+                  "risk_score":  { "type": "integer", "ignore_malformed": true }
+                }
               }
             }
-          }' > /dev/null && echo '✓ Filebeat template created'
+          }')
+        if [ "$$code" -ne 200 ]; then
+          echo "ERROR: Failed to create security event template (HTTP $$code)"
+          exit 1
+        fi
+        echo '✓ Security event template created'
 
-        # 3. Create Metricbeat index template
-        echo 'Setting up Metricbeat index template...'
-        curl -s -X PUT "http://elasticsearch:9200/_index_template/metricbeat" \
-          -u "elastic:$${ELASTIC_PASSWORD}" \
-          -H "Content-Type: application/json" \
-          -d '{
-            "index_patterns": ["metricbeat-*"],
-            "data_stream": {},
-            "priority": 200,
-            "template": {
-              "settings": {
-                "number_of_shards": 1,
-                "number_of_replicas": 0
-              }
-            }
-          }' > /dev/null && echo '✓ Metricbeat template created'
+        # 3. Filebeat and Metricbeat install their own ECS templates
+        # (setup.template.* in their configs). A higher-priority, mapping-less
+        # template created here used to shadow Filebeat's, so security-logs-*
+        # lost every ECS mapping. Remove it from clusters that still have it.
+        curl -s -o /dev/null -X DELETE -u "elastic:$${ELASTIC_PASSWORD}" \
+          "http://elasticsearch:9200/_index_template/filebeat" || true
 
         echo '=== Setup complete ==='
     restart: "no"
