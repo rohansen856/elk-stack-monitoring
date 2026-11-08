@@ -132,7 +132,7 @@ services:
       - "127.0.0.1:9600:9600" # Logstash API
       - "127.0.0.1:514:514/udp" # Syslog UDP
       - "127.0.0.1:514:514/tcp" # Syslog TCP
-      - "127.0.0.1:12201:12201" # GELF
+      - "127.0.0.1:12201:12201/udp" # GELF (the gelf input defaults to UDP)
     volumes:
       - ./logstash/pipeline:/usr/share/logstash/pipeline:ro
     depends_on:
