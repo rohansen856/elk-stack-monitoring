@@ -116,7 +116,15 @@ async def verify_metrics_access(
     except JWTError:
         raise unauthorized
 
+    # Same checks as get_current_active_user: previously any once-valid JWT
+    # was accepted here, including tokens revoked by a password change
+    # (pwd_fp) and tokens of deactivated users.
     email = payload.get("sub")
-    if email is None or get_user_by_email(db, email=email) is None:
+    user = get_user_by_email(db, email=email) if email else None
+    if (
+        user is None
+        or not user.is_active
+        or payload.get("pwd_fp") != _password_stamp(user)
+    ):
         raise unauthorized
     return None
