@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 from datetime import datetime
 from enum import Enum
@@ -10,8 +10,13 @@ class PriorityEnum(str, Enum):
     high = "high"
 
 
+# Mirrors the String(255) column in app/models/todo.py. Without the bound an
+# overlong title passed validation and failed in the database as a 500.
+TITLE_MAX_LENGTH = 255
+
+
 class TodoBase(BaseModel):
-    title: str
+    title: str = Field(..., min_length=1, max_length=TITLE_MAX_LENGTH)
     description: Optional[str] = None
     priority: PriorityEnum = PriorityEnum.medium
     due_date: Optional[datetime] = None
@@ -22,7 +27,7 @@ class TodoCreate(TodoBase):
 
 
 class TodoUpdate(BaseModel):
-    title: Optional[str] = None
+    title: Optional[str] = Field(None, min_length=1, max_length=TITLE_MAX_LENGTH)
     description: Optional[str] = None
     completed: Optional[bool] = None
     priority: Optional[PriorityEnum] = None
