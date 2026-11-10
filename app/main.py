@@ -170,4 +170,7 @@ async def metrics(_: None = Depends(verify_metrics_access)):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Binding all interfaces is intended: this entrypoint runs inside a
+    # container, where the published port is restricted by compose
+    # (127.0.0.1) or Kubernetes networking, not by the bind address.
+    uvicorn.run(app, host="0.0.0.0", port=8000)  # nosec B104
