@@ -95,7 +95,12 @@ class AlertingService:
         try:
             # Uses the shared authenticated client rather than reaching into
             # another service's private attribute.
-            get_elasticsearch().index(index=index, body=doc)
+            # Awaited: the shared client is AsyncElasticsearch. Without the
+            # await this only created a coroutine that was never run, so no
+            # alert was ever stored while the method still returned True.
+            result = await get_elasticsearch().index(index=index, document=doc)
+            if result.get("result") not in ("created", "updated"):
+                raise RuntimeError(f"Elasticsearch rejected the alert: {result.get('result')!r}")
             return True
         except Exception as e:
             logger.error("Failed to record alert in Elasticsearch", error=str(e))
