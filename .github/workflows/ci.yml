@@ -79,7 +79,9 @@ jobs:
           alembic upgrade head
           OUT=$(alembic revision --autogenerate -m ci-drift-check 2>&1)
           echo "$OUT"
-          if echo "$OUT" | grep -qE "Detected (added|removed|changed|server default|NOT NULL)"; then
+          # Alembic also reports "Detected type change" and "Detected NULL on
+          # column", which the previous pattern missed.
+          if echo "$OUT" | grep -qE "Detected (added|removed|changed|type change|server default|NOT NULL|NULL)"; then
             echo "::error::Alembic migrations do not match the models"
             exit 1
           fi
