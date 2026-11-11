@@ -12,7 +12,7 @@ xpack.security.enabled: true
 # Reverse proxy configuration
 server.basePath: "/monitoring"
 server.rewriteBasePath: true
-server.publicBaseUrl: "http://localhost/monitoring"
+server.publicBaseUrl: "https://localhost/monitoring"
 
 # Performance tuning
 server.maxPayload: 1048576
