@@ -22,7 +22,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-      - run: pip install ruff mypy
+      - run: pip install -r requirements-dev.txt mypy
       - name: ruff
         run: ruff check app tests
       - name: mypy
@@ -55,7 +55,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-      - run: pip install -r requirements.txt pytest-cov fakeredis freezegun respx
+      - run: pip install -r requirements-dev.txt
       - name: pytest
         # The suite configures its own environment in tests/conftest.py, so it
         # runs without a .env file - verified under `env -i`.
