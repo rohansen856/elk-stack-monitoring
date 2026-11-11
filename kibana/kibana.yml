@@ -29,3 +29,7 @@ logging.appenders.default:
   type: console
   layout:
     type: pattern
+# Telemetry. The project documentation states it is disabled, but nothing
+# disabled it: Kibana showed "Usage collection is enabled" on first login.
+telemetry.optIn: false
+telemetry.allowChangingOptInStatus: false
