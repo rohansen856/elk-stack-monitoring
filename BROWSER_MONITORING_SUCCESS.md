@@ -179,7 +179,7 @@ output.logstash:
 
 ### Docker Compose
 
-**Location:** `docker-compose.packetbeat.yml`
+**Location:** `docker-compose.yml` (`packetbeat` service)
 
 **Key Settings:**
 - Image: `docker.elastic.co/beats/packetbeat:8.11.0`
