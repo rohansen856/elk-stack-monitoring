@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { backendFetch, relayError } from '@/lib/backend'
 import { setSessionCookie, setUserCookie } from '@/lib/server-session'
-
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000/api/v1'
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,60 +14,46 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // First register the user
-    const registerResponse = await fetch(`${BACKEND_URL}/users/register`, {
+    const registerResponse = await backendFetch(request, '/users/register', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, username, password }),
     })
 
-    if (!registerResponse.ok) {
-      const errorData = await registerResponse.json()
-      return NextResponse.json(
-        errorData,
-        { status: registerResponse.status }
-      )
-    }
+    if (!registerResponse.ok) return relayError(registerResponse, 'Registration failed')
 
     // Then automatically log them in
-    const loginResponse = await fetch(`${BACKEND_URL}/users/login`, {
+    const loginResponse = await backendFetch(request, '/users/login', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        username: email,
-        password: password,
-      }),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ username: email, password }),
     })
 
     if (!loginResponse.ok) {
       return NextResponse.json(
         { detail: 'Registration successful but auto-login failed. Please try logging in manually.' },
-        { status: 500 }
+        { status: 502 }
       )
     }
 
     const loginData = await loginResponse.json()
 
-    // Resolve the real profile rather than inventing an id.
-    const meResponse = await fetch(`${BACKEND_URL}/users/me`, {
+    const meResponse = await backendFetch(request, '/users/me', {
       headers: { Authorization: `Bearer ${loginData.access_token}` },
     })
-    const user = meResponse.ok ? await meResponse.json() : { id: 0, email, username }
+    // No invented fallback profile (it used to fabricate `id: 0`): without a
+    // real profile the client re-fetches it via /api/auth/me.
+    const user = meResponse.ok ? await meResponse.json() : null
 
     // Token goes into an httpOnly cookie, not the response body.
     const result = NextResponse.json({ success: true, user })
     setSessionCookie(result, loginData.access_token)
-    setUserCookie(result, { id: user.id, email: user.email, username: user.username })
+    if (user) {
+      setUserCookie(result, { id: user.id, email: user.email, username: user.username })
+    }
     return result
   } catch (error) {
     console.error('[AUTH] Register error:', error)
-    return NextResponse.json(
-      { detail: 'Internal server error' },
-      { status: 500 }
-    )
+    return NextResponse.json({ detail: 'Internal server error' }, { status: 500 })
   }
 }
