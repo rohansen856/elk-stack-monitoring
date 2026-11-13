@@ -106,6 +106,9 @@ export const useAuthStore = create<AuthState>()((set) => ({
       // Server-side so the httpOnly cookie is actually cleared; client code
       // cannot delete it.
       await fetch(apiPath("/api/auth/logout"), { method: "POST" })
+    } catch {
+      // Network failure: still drop local state below. The cookie expires
+      // with the token (30 minutes) even if the server call never landed.
     } finally {
       set({ user: null, isAuthenticated: false, isHydrated: true })
     }
