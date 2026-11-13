@@ -1,6 +1,15 @@
+// Served behind nginx at /frontend. Exposed to client code as
+// NEXT_PUBLIC_BASE_PATH because Next adds the basePath to <Link> and
+// router.push, but NOT to fetch(): client calls to "/api/..." only worked
+// through an nginx rewrite and 404'd when the app was reached directly.
+const basePath = '/frontend'
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  basePath: '/frontend',
+  basePath,
+  env: {
+    NEXT_PUBLIC_BASE_PATH: basePath,
+  },
   reactStrictMode: true,
   poweredByHeader: false,
   compress: true,

@@ -1,3 +1,5 @@
+import { apiPath } from './api-path'
+
 export interface ApiError {
   detail?: string
   message?: string
@@ -45,7 +47,7 @@ async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<
     ...(options.headers as Record<string, string>),
   }
 
-  const response = await fetch(endpoint, {
+  const response = await fetch(apiPath(endpoint), {
     ...options,
     headers,
     credentials: 'same-origin',

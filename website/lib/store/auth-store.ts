@@ -1,5 +1,7 @@
 import { create } from "zustand"
 
+import { apiPath } from "@/lib/api-path"
+
 export interface AuthUser {
   id: number
   email: string
@@ -40,7 +42,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
   login: async (email: string, password: string) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await fetch("/api/auth/login", {
+      const response = await fetch(apiPath("/api/auth/login"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -71,7 +73,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
   register: async (username: string, email: string, password: string) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await fetch("/api/auth/register", {
+      const response = await fetch(apiPath("/api/auth/register"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, email, password }),
@@ -103,7 +105,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
     try {
       // Server-side so the httpOnly cookie is actually cleared; client code
       // cannot delete it.
-      await fetch("/api/auth/logout", { method: "POST" })
+      await fetch(apiPath("/api/auth/logout"), { method: "POST" })
     } finally {
       set({ user: null, isAuthenticated: false, isHydrated: true })
     }
@@ -112,7 +114,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
   /** Restore session state on load by asking the server who we are. */
   loadSession: async () => {
     try {
-      const response = await fetch("/api/auth/me")
+      const response = await fetch(apiPath("/api/auth/me"))
       if (response.ok) {
         const user = await response.json()
         set({ user, isAuthenticated: true, isHydrated: true })
