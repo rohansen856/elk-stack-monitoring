@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
-export function middleware(request: NextRequest) {
+// Next 16 renamed the `middleware` convention to `proxy` (middleware.ts is
+// deprecated). Behaviour is unchanged: a cheap cookie-presence gate. The real
+// check is server-side in /api/auth/me, which also clears a rejected cookie.
+export function proxy(request: NextRequest) {
   const token = request.cookies.get("auth_token")?.value
   const pathname = request.nextUrl.pathname
 
