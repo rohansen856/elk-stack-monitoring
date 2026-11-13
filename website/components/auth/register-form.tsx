@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { AlertCircle, Loader2 } from 'lucide-react'
+import { MIN_PASSWORD_LENGTH } from '@/lib/password-policy'
 
 export function RegisterForm() {
   const router = useRouter()
@@ -16,12 +17,22 @@ export function RegisterForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [formError, setFormError] = useState<string | null>(null)
+  const shownError = formError ?? error
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setFormError(null)
+
+    // Mirrors the backend minimum so the user gets an explanation instead of
+    // a bare 422 after submitting.
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setFormError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters long`)
+      return
+    }
 
     if (password !== confirmPassword) {
-      alert('Passwords do not match')
+      setFormError('Passwords do not match')
       return
     }
 
@@ -41,10 +52,10 @@ export function RegisterForm() {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
-          {error && (
+          {shownError && (
             <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/30 rounded-lg">
               <AlertCircle className="w-4 h-4 text-destructive" />
-              <p className="text-sm text-destructive">{error}</p>
+              <p className="text-sm text-destructive">{shownError}</p>
             </div>
           )}
 
@@ -89,11 +100,16 @@ export function RegisterForm() {
               value={password}
               onChange={(e) => {
                 setPassword(e.target.value)
+                setFormError(null)
                 clearError()
               }}
               disabled={isLoading}
               required
+              minLength={MIN_PASSWORD_LENGTH}
             />
+            <p className="text-xs text-muted-foreground">
+              At least {MIN_PASSWORD_LENGTH} characters
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -103,7 +119,10 @@ export function RegisterForm() {
               type="password"
               placeholder="••••••••"
               value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
+              onChange={(e) => {
+                setConfirmPassword(e.target.value)
+                setFormError(null)
+              }}
               disabled={isLoading}
               required
             />
