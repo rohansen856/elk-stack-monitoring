@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { Plus, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Priority } from '@/lib/store/todo-store'
 
 interface AddTodoFormProps {
@@ -37,6 +38,10 @@ export function AddTodoForm({ onSubmit, isLoading = false }: AddTodoFormProps) {
       setPriority('medium')
       setDueDate('')
       setIsExpanded(false)
+    } catch (error) {
+      // The store re-throws; without a catch this was an unhandled rejection
+      // and the user got no feedback. The form keeps its input for a retry.
+      toast.error(error instanceof Error ? error.message : 'Could not add the task')
     } finally {
       setIsSubmitting(false)
     }
