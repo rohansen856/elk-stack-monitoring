@@ -353,5 +353,7 @@ echo -e "  2. Restart Logstash to apply configuration"
 echo -e "  3. Test with simulation script"
 echo ""
 echo -e "Test a threat intel lookup:"
-echo -e "  ${BLUE}curl -u $ES_USER:$ES_PASS '$ES_URL/threat-intel-ips-*/_search?q=threat.indicator.ip:13.59.205.66'${NC}"
+# Print the variable name, never its value: this line used to echo the real
+# superuser password into terminals, CI logs and shell scrollback.
+echo -e "  ${BLUE}curl -u \"$ES_USER:\$ELASTICSEARCH_PASSWORD\" '$ES_URL/threat-intel-ips-*/_search?q=threat.indicator.ip:13.59.205.66'${NC}"
 echo ""
