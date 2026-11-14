@@ -4,6 +4,7 @@
 # MITRE ATT&CK: Full Kill Chain Simulation
 
 API_BASE="${API_BASE:-http://localhost:8000}"
+source "$(dirname "$0")/_auth.sh"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "🎯 APT Simulation: Complete Kill Chain Attack"
@@ -159,7 +160,7 @@ for command in "${cleanup_commands[@]}"; do
     log_stage "CLEANUP" "SIMULATED" "Attempting: $command"
 
     # Log as PowerShell execution
-    curl -s -X POST "$API_BASE/api/v1/security/simulate/powershell" \
+    curl -s -X POST -H "$AUTH_HEADER" "$API_BASE/api/v1/security/simulate/powershell" \
         -H "Content-Type: application/json" \
         -d "{
             \"command\": \"$command\",

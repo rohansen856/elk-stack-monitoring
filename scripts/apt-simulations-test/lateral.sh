@@ -4,6 +4,7 @@
 # MITRE ATT&CK: T1021 - Remote Services, T1078 - Valid Accounts
 
 API_BASE="${API_BASE:-http://localhost:8000}"
+source "$(dirname "$0")/_auth.sh"
 
 echo "🔄 APT Simulation: Lateral Movement"
 echo "==================================="
@@ -86,7 +87,7 @@ for i in "${!target_hosts[@]}"; do
     echo "    Logon Type: 3 (Network)"
 
     # Send lateral movement event
-    response=$(curl -s -X POST "$API_BASE/api/v1/security/simulate/lateral-movement" \
+    response=$(curl -s -X POST -H "$AUTH_HEADER" "$API_BASE/api/v1/security/simulate/lateral-movement" \
         -H "Content-Type: application/json" \
         -d "{
             \"user\": \"$compromised_user\",
@@ -124,7 +125,7 @@ for i in {1..3}; do
     echo "  [$i/3] Privilege escalation on $host"
     echo "    Command: $command"
 
-    curl -s -X POST "$API_BASE/api/v1/security/simulate/privilege-escalation" \
+    curl -s -X POST -H "$AUTH_HEADER" "$API_BASE/api/v1/security/simulate/privilege-escalation" \
         -H "Content-Type: application/json" \
         -d "{
             \"command\": \"$command\",
