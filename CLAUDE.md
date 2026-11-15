@@ -58,140 +58,116 @@ The application runs as a multi-container Docker Compose stack with the followin
 
 ### Security Indices in Elasticsearch
 
-The threat detection service searches across multiple index patterns:
-- `security-auth-logs-*` - Authentication events
-- `security-network-logs-*` - Network security events
-- `security-audit-logs-*` - File access events
-- `security-alerts-*` - Generated security alerts
-- `windows-security-logs-*` - Windows event logs
-- General `security-*` pattern for aggregated searches
+Event indices (written by the app's `security_logger.py` and by Logstash):
+- `security-auth-logs-*` - Authentication events (app logins, SSH, Cisco login failures)
+- `security-network-logs-*` - Network events (app simulations, Packetbeat transactions, Cisco config changes)
+- `security-windows-logs-*` - Windows events received as syslog
+- `security-powershell-logs-*`, `security-privilege-logs-*`, `security-lateral-logs-*` - App-logged events
+- `security-firewall-logs-*`, `security-ids-logs-*` - Firewall / IDS syslog
+- `security-logs-*` - Filebeat host logs (data stream, written directly by Filebeat)
+
+Derived indices (excluded from detection queries so nothing is counted twice):
+- `security-alerts-*` - Alerts written by `alerting.py` for high-risk threats
+- `security-threats-*`, `threat-intel-matches-*` - Events enriched by a threat-intel match
+
+Detectors query `security-*,-security-threats-*,-security-alerts-*` (see
+`EVENT_INDICES` in `app/services/threat_detection.py`). `source.ip`,
+`destination.ip` and `src_ip` are mapped as `ip` by the
+`sentinel-security-events` index template, which the `setup-elk` service
+creates; range/CIDR queries rely on that mapping.
 
 ## Development Commands
 
 ### Full Stack Development
 
-**Recommended: Use the automated startup script**
 ```bash
-# Start all services with automatic ELK setup (RECOMMENDED)
-./local-startup.sh
+cp .env.example .env
+cp website/.env.example website/.env
 
-# This script automatically:
-# - Starts all services
-# - Waits for Elasticsearch
-# - Verifies setup-elk completed
-# - Force-sets Kibana password (ensures auth works)
-# - Restarts Kibana
-# - Shows service status and access URLs
+# Start all services. Migrations run automatically (migrate service) and the
+# setup-elk service sets the kibana_system password and the index template;
+# Kibana does not start unless that succeeds.
+docker compose up -d
+docker compose ps          # wait for (healthy)
+
+# Logs
+docker compose logs -f
+docker compose logs -f app
+docker compose logs setup-elk
+
+# Stop / fresh start (down -v deletes all data)
+docker compose down
+docker compose down -v
 ```
 
-**Manual startup (if you prefer)**
-```bash
-# Start all services (includes automatic database migration)
-docker-compose up -d
-
-# IMPORTANT: If you see Kibana authentication errors, run this:
-docker compose exec -T elasticsearch curl -X POST -s -u "elastic:$ELASTICSEARCH_PASSWORD" \
-  "http://localhost:9200/_security/user/kibana_system/_password" \
-  -H "Content-Type: application/json" -d '{"password":"$KIBANA_SYSTEM_PASSWORD"}'
-docker compose restart kibana
-
-# View logs for all services
-docker-compose logs -f
-
-# View logs for specific service
-docker-compose logs -f app
-docker-compose logs -f frontend
-docker-compose logs -f elasticsearch
-
-# Stop all services
-docker-compose down
-
-# Stop and remove volumes (fresh start)
-docker-compose down -v
-
-# Check service status
-docker-compose ps
-```
+Config files that are bind-mounted (nginx/nginx.conf, logstash/pipeline/*,
+kibana/kibana.yml, filebeat/filebeat.yml, metricbeat/metricbeat.yml) are not
+watched by compose: `docker compose restart <service>` after editing them.
 
 ### Backend Development (Python)
 
 ```bash
-# Manual setup (if not using Docker)
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt   # runtime deps + pytest, fakeredis, ruff
 
 # Database migrations (inside Docker container)
 docker compose exec app alembic revision --autogenerate -m "Description of changes"
 docker compose exec app alembic upgrade head
 
-# Database migrations (local development)
-alembic revision --autogenerate -m "Description of changes"
-alembic upgrade head
-
 # Run backend server (development mode with auto-reload)
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
-# Run tests
+# Run tests (self-contained: SQLite, fakeredis and a fake Elasticsearch client
+# from tests/conftest.py; no .env or running services needed)
 pytest
 pytest --cov=app --cov-report=html
 pytest tests/test_auth.py
-pytest tests/test_security.py
+pytest tests/test_detection_queries.py
 
-# Code quality
-black app/ tests/
-flake8 app/ tests/
-mypy app/
+# Code quality (rules pinned in ruff.toml)
+ruff check app tests
+mypy app/ --ignore-missing-imports
 ```
 
 ### Frontend Development (Next.js)
 
 ```bash
 cd website
-
-# Install dependencies
-npm install
-
-# Run development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Start production server
-npm start
-
-# Lint
+npm ci
+npm run dev      # served under the /frontend basePath: http://localhost:3000/frontend
+npx tsc --noEmit
 npm run lint
+npm run build
 ```
+
+Client code must call route handlers through `apiPath()` (`website/lib/api-path.ts`):
+Next applies the basePath to links and navigation but not to `fetch()`.
+Route handlers reach the backend through `backendFetch()` (`website/lib/backend.ts`),
+which forwards the client IP so the backend's per-IP rate limits work.
 
 ### Health Checks
 
 ```bash
-# Backend health
-curl http://localhost:8000/health
+set -a; . ./.env; set +a          # load ELASTIC_PASSWORD into this shell
 
-# Elasticsearch cluster health
-curl http://localhost:9200/_cluster/health
-
-# Logstash stats
+curl -k https://localhost/backend/health
+curl -u "elastic:$ELASTIC_PASSWORD" http://localhost:9200/_cluster/health
 curl http://localhost:9600/_node/stats
-
-# Kibana status
-curl http://localhost:5601/api/status
+curl -u "elastic:$ELASTIC_PASSWORD" http://localhost:5601/monitoring/api/status
 ```
 
 ### ELK Stack Operations
 
 ```bash
 # Check Elasticsearch indices
-curl "localhost:9200/_cat/indices?v"
+curl -u "elastic:$ELASTIC_PASSWORD" "localhost:9200/_cat/indices?v"
 
-# Test Logstash TCP input (port 5000)
-echo '{"message": "test"}' | nc localhost 5000
+# Test the Logstash TCP input (json_lines: ONE event per line)
+echo '{"message": "test"}' | nc -w1 localhost 5000
 
-# Check index health and optimize
-curl -X POST "localhost:9200/_optimize"
+# Merge segments of an index that is no longer written to
+curl -u "elastic:$ELASTIC_PASSWORD" -X POST "localhost:9200/<index>/_forcemerge?max_num_segments=1"
 ```
 
 ## Configuration
@@ -256,7 +232,19 @@ Copy from `.env.example` and `website/.env.example` to get started.
 
 ## Testing & Simulation
 
-The `scripts/apt-simulations-test/` directory contains sample APT simulation scripts for testing threat detection capabilities. These can be used to verify that the security monitoring pipeline is working correctly.
+The `scripts/apt-simulations-test/` directory contains APT simulation scripts for testing threat detection.
+
+- API-based scripts (`powershell.sh`, `exfiltration.sh`, `lateral.sh`, `persistence.sh`,
+  `full-attack.sh`) call the authenticated `/api/v1/security/simulate/*` endpoints via
+  `_auth.sh`: set `SENTINEL_TOKEN`, or `SENTINEL_EMAIL` + `SENTINEL_PASSWORD`; otherwise a
+  throwaway account is registered. `/simulate/*` returns 404 when `ENVIRONMENT=production`.
+- Syslog-based scripts (`windows-security.sh`, `network-devices.sh`, `mimikatz-*.sh`, ...)
+  send to Logstash on UDP 514.
+- Threat intel: `scripts/setup-threat-intel-indices.sh`, then
+  `scripts/populate-threat-intel-data.sh`, then `apt-simulations-test/threat-intel-test.sh`
+  (all need `ELASTICSEARCH_PASSWORD` exported).
+- The login rate limit is 10/minute per client IP, so running `brute-force.sh` can make the
+  next script's login fail with 429 for up to a minute.
 
 ## Documentation
 
@@ -293,33 +281,25 @@ The `setup-elk` service in docker-compose.yml automatically handles all ELK Stac
 
 **What it does:**
 1. Waits for Elasticsearch to be healthy
-2. Sets the `kibana_system` password in Elasticsearch
-3. Creates Filebeat index template for log collection
-4. Creates Metricbeat index template for metric collection
-5. Ensures all components can connect without errors
+2. Sets the `kibana_system` password in Elasticsearch (exits non-zero on failure)
+3. Creates the `sentinel-security-events` index template (`ip` mappings for
+   `source.ip`, `destination.ip`, `src_ip`; numeric `risk_score`, byte counters)
+4. Removes a legacy mapping-less `filebeat` template from older clusters; Filebeat
+   and Metricbeat install their own ECS templates via `setup.template.*`
 
 **How it works:**
 - Runs after Elasticsearch is healthy (before Kibana and Beats start)
 - Uses the `ELASTIC_PASSWORD` and `KIBANA_SYSTEM_PASSWORD` environment variables
-- Creates necessary index templates to prevent data stream errors
-- All services depend on successful completion of this setup
+- Kibana and the beats depend on it completing successfully
 
 **Configuration:**
 - Set `KIBANA_SYSTEM_PASSWORD` in `.env` (required - there is no default)
 - Set `ELASTIC_PASSWORD` in `.env` (required - there is no default; the stack refuses to start without it)
 - Both are also defined in `.env.example` for reference
 
-**Benefits:**
-- ✅ No manual password resets needed when recreating containers
-- ✅ No Kibana authentication failures
-- ✅ No Filebeat/Metricbeat template errors
-- ✅ Consistent authentication across stack restarts
-- ✅ Automatic synchronization between all ELK components
-
 **What's automated:**
 - Kibana system user password configuration
-- Filebeat index templates (`filebeat-*`, `security-logs*`)
-- Metricbeat index templates (`metricbeat-*`)
+- Security event index template (`security-*-logs-*`, `security-threats-*`, `security-alerts-*`)
 
 **Troubleshooting:**
 Check the setup service logs to see what was configured:
@@ -333,20 +313,19 @@ Expected output:
 ✓ Elasticsearch ready
 Setting kibana_system password...
 ✓ kibana_system password set
-Setting up Filebeat index template...
-✓ Filebeat template created
-Setting up Metricbeat index template...
-✓ Metricbeat template created
+Setting up Sentinel security event index template...
+✓ Security event template created
 === Setup complete ===
 ```
 
 If setup fails, manually verify Elasticsearch access:
 ```bash
+set -a; . ./.env; set +a
 # Check Elasticsearch health
-curl -u "elastic:$ELASTICSEARCH_PASSWORD" http://localhost:9200/_cluster/health
+curl -u "elastic:$ELASTIC_PASSWORD" http://localhost:9200/_cluster/health
 
 # Check if kibana_system user exists
-curl -u "elastic:$ELASTICSEARCH_PASSWORD" http://localhost:9200/_security/user/kibana_system
+curl -u "elastic:$ELASTIC_PASSWORD" http://localhost:9200/_security/user/kibana_system
 ```
 
 ### Security Context
@@ -359,7 +338,7 @@ This is a security monitoring application. When modifying threat detection logic
 ### Production Configuration
 
 **Environment Setup:**
-1. Copy `.env.production.example` to `.env` and configure all values
+1. Copy `.env.example` to `.env` and replace every value (they are development credentials)
 2. Generate a strong SECRET_KEY: `openssl rand -hex 64`
 3. Update all passwords (database, email, etc.)
 4. Set `ENVIRONMENT=production` to disable API docs
@@ -390,12 +369,12 @@ This is a security monitoring application. When modifying threat detection logic
 
 ## AWS Deployment with Nginx Reverse Proxy
 
-The application uses **Nginx as a reverse proxy** to route all traffic through port 80, making it suitable for AWS EC2 deployment with minimal security group configuration.
+The application uses **Nginx as a reverse proxy**: port 80 redirects to HTTPS on 443, where nginx terminates TLS (self-signed by default, generated by the `cert-init` service into `nginx/certs/`) and routes to the services.
 
 ### Architecture
 
 ```
-Internet (Port 80) → Nginx → {
+Internet (80 → 301, 443 TLS) → Nginx → {
     /              → Redirects to /frontend
     /frontend      → Frontend Dashboard (3000)
     /backend       → Backend API (8000)
@@ -404,9 +383,10 @@ Internet (Port 80) → Nginx → {
 ```
 
 **Key Points:**
-- Only **port 80** is exposed publicly via Nginx
-- All other services (frontend:3000, backend:8000, kibana:5601) are **internal only** (using `expose` instead of `ports` in docker-compose)
-- Database services (PostgreSQL, Redis, Elasticsearch) remain **completely private**
+- nginx publishes 80/443 on `NGINX_BIND` (default `127.0.0.1`; set `NGINX_BIND=0.0.0.0` on a server)
+- Every other service publishes its port on `127.0.0.1` only (for local debugging), never on a public interface
+- nginx sets `X-Forwarded-For` to the real client address (it overwrites, never appends) and the
+  backend trusts it (`FORWARDED_ALLOW_IPS`), so per-IP rate limits and security events see real clients
 
 ### AWS EC2 Setup
 
@@ -416,7 +396,8 @@ Configure your EC2 instance security group with **minimal open ports**:
 
 | Type | Protocol | Port Range | Source      | Description                    |
 |------|----------|------------|-------------|--------------------------------|
-| HTTP | TCP      | 80         | 0.0.0.0/0   | Public web access via Nginx    |
+| HTTP | TCP      | 80         | 0.0.0.0/0   | Redirects to HTTPS             |
+| HTTPS| TCP      | 443        | 0.0.0.0/0   | Public web access via Nginx    |
 | SSH  | TCP      | 22         | Your IP     | SSH access (restrict to your IP)|
 
 **Important:** Do NOT open ports 3000, 5601, 8000, 9200, 5432, 6379 - these should remain internal.
@@ -446,8 +427,8 @@ cd elk-stack-monitoring
 
 # Run automated setup script
 # This will automatically detect EC2 IP, configure .env files, and build containers
-chmod +x aws-ec2-setup.sh
-./aws-ec2-setup.sh
+chmod +x scripts/aws-ec2-setup.sh
+./scripts/aws-ec2-setup.sh
 ```
 
 **Option B: Manual Setup**
@@ -459,9 +440,12 @@ chmod +x aws-ec2-setup.sh
 cp .env.example .env
 cp website/.env.example website/.env
 
-# IMPORTANT: Update website/.env with your EC2 public IP
-# Replace: NEXT_PUBLIC_APP_URL=http://localhost/frontend
-# With:    NEXT_PUBLIC_APP_URL=http://YOUR_EC2_IP/frontend
+# Publish nginx on all interfaces (the default is loopback only)
+sed -i 's/^NGINX_BIND=.*/NGINX_BIND=0.0.0.0/' .env
+
+# Update website/.env with your EC2 public IP
+# Replace: NEXT_PUBLIC_APP_URL=https://localhost/frontend
+# With:    NEXT_PUBLIC_APP_URL=https://YOUR_EC2_IP/frontend
 nano website/.env
 
 # Build and start services (MUST rebuild frontend after changing .env)
@@ -481,42 +465,42 @@ docker compose build frontend --no-cache
 docker compose up -d
 ```
 
-**Troubleshooting:** See [AWS_EC2_TROUBLESHOOTING.md](AWS_EC2_TROUBLESHOOTING.md) for common issues and fixes.
+**Troubleshooting:** See [docs/AWS_DEPLOYMENT.md](docs/AWS_DEPLOYMENT.md) and [docs/SETUP_AND_TROUBLESHOOTING.md](docs/SETUP_AND_TROUBLESHOOTING.md).
 
 #### 3. Access Your Application
 
 Replace `YOUR_EC2_PUBLIC_IP` with your actual EC2 public IP or domain:
 
-- **Frontend Dashboard**: `http://YOUR_EC2_PUBLIC_IP/frontend`
-- **Backend API**: `http://YOUR_EC2_PUBLIC_IP/backend/api/v1/...`
-- **Backend Health Check**: `http://YOUR_EC2_PUBLIC_IP/backend/health`
-- **Backend API Documentation**: `http://YOUR_EC2_PUBLIC_IP/backend/docs` (if ENVIRONMENT=development)
-- **Kibana Dashboard**: `http://YOUR_EC2_PUBLIC_IP/monitoring/`
-- **Backend Metrics**: `http://YOUR_EC2_PUBLIC_IP/backend/metrics`
+- **Frontend Dashboard**: `https://YOUR_EC2_PUBLIC_IP/frontend`
+- **Backend API**: `https://YOUR_EC2_PUBLIC_IP/backend/api/v1/...`
+- **Backend Health Check**: `https://YOUR_EC2_PUBLIC_IP/backend/health`
+- **Backend API Documentation**: `https://YOUR_EC2_PUBLIC_IP/backend/docs` (if ENVIRONMENT=development)
+- **Kibana Dashboard**: `https://YOUR_EC2_PUBLIC_IP/monitoring/`
+- **Backend Metrics**: `https://YOUR_EC2_PUBLIC_IP/backend/metrics`
 
 #### 4. Verify Nginx Routing
 
 ```bash
 # Test nginx health
-curl http://localhost/nginx-health
+curl -k https://localhost/nginx-health
 
 # Test frontend
-curl http://localhost/frontend
+curl -k https://localhost/frontend
 
 # Test backend health
-curl http://localhost/backend/health
+curl -k https://localhost/backend/health
 
 # Test backend API
-curl http://localhost/backend/api/v1/users/me
+curl -k https://localhost/backend/api/v1/users/me
 
 # Test Kibana (should return 302 redirect)
-curl -I http://localhost/monitoring/
+curl -kI https://localhost/monitoring/
 
 # View nginx logs
-docker-compose logs nginx
+docker compose logs nginx
 
 # Test from outside (replace with your IP)
-curl http://YOUR_EC2_PUBLIC_IP/backend/health
+curl -k https://YOUR_EC2_PUBLIC_IP/backend/health
 ```
 
 ### Frontend API Configuration
@@ -524,7 +508,7 @@ curl http://YOUR_EC2_PUBLIC_IP/backend/health
 The frontend needs to call the backend API. Update `website/.env`:
 
 ```env
-NEXT_PUBLIC_API_URL=http://YOUR_EC2_PUBLIC_IP/backend
+NEXT_PUBLIC_API_URL=https://YOUR_EC2_PUBLIC_IP/backend
 ```
 
 Or use relative URLs (`/backend`) since everything is on the same domain through Nginx.
@@ -586,13 +570,13 @@ The application includes production-ready configurations out of the box:
    sudo dpkg -i amazon-cloudwatch-agent.deb
 
    # Forward Docker logs
-   docker-compose logs -f | aws logs put-log-events --log-group-name /sentinel/app
+   docker compose logs -f | aws logs put-log-events --log-group-name /sentinel/app
    ```
 
 6. **Set up Automated Backups**:
    ```bash
    # PostgreSQL backup script
-   docker compose exec db pg_dump -U user todo_db > backup_$(date +%Y%m%d).sql
+   docker compose exec db sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > backup_$(date +%Y%m%d).sql
    aws s3 cp backup_$(date +%Y%m%d).sql s3://your-backup-bucket/
 
    # Elasticsearch snapshot
@@ -611,7 +595,7 @@ The production-ready Nginx configuration at [nginx/nginx.conf](nginx/nginx.conf)
 - **Rate limiting**: 3 zones (api_limit, auth_limit, general_limit)
 - **Security headers**: X-Frame-Options, CSP, HSTS, X-Content-Type-Options
 - **WebSocket support**: For Next.js hot reload and Kibana
-- **CORS headers**: Configured for API requests
+- **CORS**: set by the application from `CORS_ORIGINS`, not by nginx
 - **Proxy headers**: Real IP tracking (X-Real-IP, X-Forwarded-For)
 - **Gzip compression**: For text/json/javascript/css files
 - **Custom buffers**: Large request handling (100M max body size)
@@ -622,23 +606,23 @@ The production-ready Nginx configuration at [nginx/nginx.conf](nginx/nginx.conf)
 
 ```bash
 # Check if nginx is running
-docker-compose ps nginx
+docker compose ps nginx
 
 # View nginx error logs
-docker-compose logs nginx --tail 100
+docker compose logs nginx --tail 100
 
 # Test internal connectivity
-docker-compose exec nginx wget -O- http://frontend:3000
-docker-compose exec nginx wget -O- http://app:8000/health
-docker-compose exec nginx wget -O- http://kibana:5601
+docker compose exec nginx wget -O- http://frontend:3000
+docker compose exec nginx wget -O- http://app:8000/health
+docker compose exec nginx wget -O- http://kibana:5601
 
 # Test nginx routing
-curl http://localhost/frontend
-curl http://localhost/backend/health
-curl http://localhost/monitoring/
+curl -k https://localhost/frontend
+curl -k https://localhost/backend/health
+curl -k https://localhost/monitoring/
 
 # Restart nginx only
-docker-compose restart nginx
+docker compose restart nginx
 
 # Check EC2 security group
 # Ensure port 80 is open to 0.0.0.0/0
