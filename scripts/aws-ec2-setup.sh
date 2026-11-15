@@ -60,18 +60,29 @@ fi
 echo ""
 echo -e "${YELLOW}Step 2: Configuring for AWS EC2...${NC}"
 
-# Update NEXT_PUBLIC_APP_URL in website/.env
+# Update NEXT_PUBLIC_APP_URL in website/.env. The example uses https://, which
+# the previous http-only pattern never matched, so this silently did nothing.
 if grep -q "localhost" website/.env; then
-    sed -i "s|http://localhost/frontend|http://$EC2_IP/frontend|g" website/.env
-    echo "✓ Updated NEXT_PUBLIC_APP_URL to http://$EC2_IP/frontend"
+    sed -i -E "s#https?://localhost/frontend#https://$EC2_IP/frontend#g" website/.env
+    echo "✓ Updated NEXT_PUBLIC_APP_URL to https://$EC2_IP/frontend"
 else
     echo "✓ NEXT_PUBLIC_APP_URL already configured"
 fi
 
+# nginx publishes on NGINX_BIND, which defaults to 127.0.0.1 so a laptop
+# stack is not exposed to the LAN. On EC2 that made the instance unreachable
+# from outside; the security group is the access control there.
+if grep -q "^NGINX_BIND=" .env; then
+    sed -i "s|^NGINX_BIND=.*|NGINX_BIND=0.0.0.0|" .env
+else
+    echo "NGINX_BIND=0.0.0.0" >> .env
+fi
+echo "✓ nginx will listen on all interfaces (NGINX_BIND=0.0.0.0)"
+
 # Update Kibana publicBaseUrl in kibana.yml
 if grep -q "localhost" kibana/kibana.yml; then
-    sed -i "s|server.publicBaseUrl:.*|server.publicBaseUrl: \"http://$EC2_IP/monitoring\"|g" kibana/kibana.yml
-    echo "✓ Updated Kibana publicBaseUrl to http://$EC2_IP/monitoring"
+    sed -i "s|server.publicBaseUrl:.*|server.publicBaseUrl: \"https://$EC2_IP/monitoring\"|g" kibana/kibana.yml
+    echo "✓ Updated Kibana publicBaseUrl to https://$EC2_IP/monitoring"
 else
     echo "✓ Kibana publicBaseUrl already configured"
 fi
@@ -134,49 +145,38 @@ else
     docker compose logs setup-elk
 fi
 
-# Step 6.5: Force set Kibana password (ensures it works even if setup-elk had issues)
-echo ""
-echo -e "${YELLOW}Ensuring Kibana password is set correctly...${NC}"
-
-# Force set the kibana_system password from KIBANA_SYSTEM_PASSWORD
-docker compose exec -T elasticsearch curl -X POST -s \
-  -u "elastic:${ELASTIC_PASSWORD:?ELASTIC_PASSWORD must be set}" \
-  "http://localhost:9200/_security/user/kibana_system/_password" \
-  -H "Content-Type: application/json" \
-  -d "{\"password\":\"${KIBANA_SYSTEM_PASSWORD:?KIBANA_SYSTEM_PASSWORD must be set}\"}" > /dev/null 2>&1
-
-if [ $? -eq 0 ]; then
-    echo -e "${GREEN}✓ Kibana password confirmed${NC}"
-    # Restart Kibana to pick up the password
-    docker compose restart kibana > /dev/null 2>&1
-    echo -e "${GREEN}✓ Kibana restarted${NC}"
-    echo "Waiting 30 seconds for Kibana to initialize..."
-    sleep 30
-else
-    echo -e "${YELLOW}⚠ Could not verify Kibana password (this is usually fine)${NC}"
-fi
+# (A former "Step 6.5" re-set the kibana_system password here. It read
+# ELASTIC_PASSWORD without loading .env, so its `:?` guard aborted the script,
+# and setup-elk now fails - and blocks Kibana - if it cannot set the password.)
 
 # Step 7: Verify services
 echo ""
 echo -e "${YELLOW}Step 7: Verifying services...${NC}"
 echo ""
 
+# nginx redirects HTTP to HTTPS and serves a self-signed certificate by
+# default, so check over https with -k. Over http every check received the
+# 301 redirect, which `curl -f` counts as success, so they could never fail.
+https_status() {
+    curl -sk -o /dev/null -w '%{http_code}' "$1"
+}
+
 # Check backend
-if curl -sf http://localhost/backend/health > /dev/null; then
+if [ "$(https_status https://localhost/backend/health)" = "200" ]; then
     echo -e "${GREEN}✓ Backend API is healthy${NC}"
 else
     echo -e "${RED}✗ Backend API is not responding${NC}"
 fi
 
-# Check Kibana
-if curl -sf http://localhost/monitoring/api/status > /dev/null; then
+# Check Kibana (401 = up and enforcing authentication)
+if [[ "$(https_status https://localhost/monitoring/api/status)" =~ ^(200|401)$ ]]; then
     echo -e "${GREEN}✓ Kibana is healthy${NC}"
 else
     echo -e "${RED}✗ Kibana is not responding (may still be initializing)${NC}"
 fi
 
 # Check nginx
-if curl -sf http://localhost/nginx-health > /dev/null; then
+if [ "$(https_status https://localhost/nginx-health)" = "200" ]; then
     echo -e "${GREEN}✓ Nginx is healthy${NC}"
 else
     echo -e "${RED}✗ Nginx is not responding${NC}"
@@ -187,9 +187,9 @@ echo ""
 echo -e "${GREEN}=== Setup Complete! ===${NC}"
 echo ""
 echo "Access your application at:"
-echo -e "${GREEN}Frontend:${NC}  http://$EC2_IP/frontend"
-echo -e "${GREEN}Backend:${NC}   http://$EC2_IP/backend/docs"
-echo -e "${GREEN}Kibana:${NC}    http://$EC2_IP/monitoring"
+echo -e "${GREEN}Frontend:${NC}  https://$EC2_IP/frontend"
+echo -e "${GREEN}Backend:${NC}   https://$EC2_IP/backend/docs"
+echo -e "${GREEN}Kibana:${NC}    https://$EC2_IP/monitoring"
 echo ""
 echo "Default credentials:"
 echo -e "${GREEN}Elasticsearch:${NC} elastic / (ELASTIC_PASSWORD from .env - not printed)"
