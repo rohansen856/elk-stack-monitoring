@@ -237,6 +237,66 @@ Analyze APT kill-chain correlations.
 ```
 
 
+
+### Behavioural Anomaly Detection (machine learning)
+
+An Isolation Forest learns each environment's normal behaviour: one sample per
+source IP per hour (auth failures and successes, failure ratio, distinct users,
+hosts and destinations, bytes out, process and privilege events, highest rule
+risk, hour of day). It is trained on the `ML_BASELINE_DAYS` before the scoring
+window, and the last `ML_SCORE_WINDOW_MINUTES` are scored against it.
+
+`risk_score` (1-10) is calibrated against the baseline:
+
+| Percentile | Risk |
+|---|---|
+| < 0.1% | 10 |
+| < 0.5% | 9 |
+| < 1% | 8 |
+| < 2% | 7 |
+| < 5% | 6 |
+| < 10% | 5 |
+| < 25% | 4 |
+| < 50% | 3 |
+| < 75% | 2 |
+| otherwise | 1 |
+
+Here "percentile" is the share of baseline hours that were at least as
+anomalous. Anomalies at or above `ML_THREAT_MIN_RISK` (default 8) are also
+returned by `/threats/scan` as `behavioral_anomaly` threats, and therefore
+alerted on. Until the baseline holds `ML_MIN_TRAINING_SAMPLES` entity-hours,
+`status` is `insufficient_baseline` and nothing is scored.
+
+#### GET /api/v1/security/ml/anomalies?min_risk=1
+```json
+{
+  "model": {"status": "trained", "algorithm": "isolation_forest", "training_samples": 1226, "...": "..."},
+  "anomalies": [
+    {
+      "entity": "203.0.113.99",
+      "window_start": "2026-11-17T14:00:00+00:00",
+      "risk_score": 10,
+      "anomaly_score": -0.7421,
+      "baseline_percentile": 0.0008,
+      "deviations": [
+        "auth_failures=40 is 37.1 MADs above the baseline median of 0",
+        "distinct_users=12 is 18.7 MADs above the baseline median of 1"
+      ],
+      "features": {"events": 40, "auth_failures": 40, "failure_ratio": 1.0, "...": "..."}
+    }
+  ]
+}
+```
+
+#### GET /api/v1/security/ml/status
+Model state: `status` (`trained`, `insufficient_baseline`, `untrained`, or
+`disabled`), `trained_at`, `training_samples`, `baseline_window` and `features`.
+
+#### POST /api/v1/security/ml/train
+Retrain now rather than waiting for `ML_RETRAIN_MINUTES` (default 30). Returns
+the status. For a demo stack with no history, run
+`scripts/seed-ml-baseline.py` first.
+
 ## Data Models
 
 ### User
