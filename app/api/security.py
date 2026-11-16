@@ -1,7 +1,8 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from typing import List
 from app.config import settings
 from app.services.threat_detection import threat_detector
+from app.services.anomaly_detection import anomaly_detector
 from app.services.alerting import alerting_service
 from app.services.security_logger import security_logger
 from pydantic import BaseModel, Field
@@ -77,6 +78,21 @@ async def run_threat_scan(background_tasks: BackgroundTasks):
 @router.get("/threats/brute-force")
 async def detect_brute_force():
     """Detect brute force attacks"""
+@router.get("/ml/status")
+async def ml_status():
+    """State of the behavioural anomaly model (training window, sample count, features)."""
+    return anomaly_detector.status()
+
+@router.post("/ml/train")
+async def ml_train():
+    """Retrain the behavioural anomaly model now instead of waiting for ML_RETRAIN_MINUTES."""
+    return await anomaly_detector.train(force=True)
+
+@router.get("/ml/anomalies")
+async def ml_anomalies(min_risk: int = Query(1, ge=1, le=10)):
+    """Score each source IP's recent behaviour against the learned baseline (1-10)."""
+    return await anomaly_detector.detect(min_risk=min_risk)
+
     threats = await threat_detector.detect_brute_force_attacks()
     return {"threats": threats, "count": len(threats)}
 
