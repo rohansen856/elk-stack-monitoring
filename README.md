@@ -111,6 +111,8 @@ A comprehensive cybersecurity platform that combines task management with advanc
 
 ### Security Stack
 - **Threat Detection Engine** - Real-time analysis of security events
+- **Behavioural Anomaly Detection (ML)** - An Isolation Forest learns normal per-IP hourly behaviour and
+  turns deviations into explained 1-10 risk scores (`/api/v1/security/ml/*`)
 - **ELK Stack Integration** - Professional-grade log analysis platform
 - **Alerting System** - Multi-channel notifications for security incidents
 - **Prometheus Metrics** - System performance monitoring
@@ -134,6 +136,7 @@ A comprehensive cybersecurity platform that combines task management with advanc
 - **Data Exfiltration Monitoring** - Unusual data transfer pattern detection
 - **PowerShell Attack Detection** - Malicious script execution monitoring
 - **APT Kill-chain Analysis** - Advanced persistent threat correlation
+- **Behavioural Anomalies** - Machine-learned baseline catches unusual activity no fixed rule describes
 
 ### Risk Scoring System
 | Risk Level | Score | Response |

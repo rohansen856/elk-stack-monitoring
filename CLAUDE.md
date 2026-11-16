@@ -36,6 +36,8 @@ The application runs as a multi-container Docker Compose stack with the followin
 - **app/api/** - API route handlers (auth.py, users.py, todos.py, security.py)
 - **app/services/** - Business logic layer:
   - `threat_detection.py` - Core security analysis (brute force, data exfiltration, PowerShell attacks, APT correlation)
+  - `anomaly_detection.py` + `ml/` - Behavioural anomaly detection: Isolation Forest (scikit-learn) over
+    per-source-IP hourly features, calibrated to the 1-10 risk scale (`ml/model.py`, `ml/features.py`)
   - `security_logger.py` - Structured logging to ELK Stack
   - `alerting.py` - Security alerting system
   - `email_service.py` - Password reset functionality
@@ -224,6 +226,7 @@ Copy from `.env.example` and `website/.env.example` to get started.
 - `GET /api/v1/security/threats/apt-correlation` - APT kill-chain correlation
 - `GET /api/v1/security/threats/scan` - Comprehensive threat scan
 - `GET /api/v1/security/hunt/*` - Various threat hunting endpoints
+- `GET /api/v1/security/ml/anomalies` - ML behavioural anomaly scores (also `GET /ml/status`, `POST /ml/train`)
 
 ### System
 - `GET /health` - Health check (database, redis, elasticsearch)
@@ -240,6 +243,8 @@ The `scripts/apt-simulations-test/` directory contains APT simulation scripts fo
   throwaway account is registered. `/simulate/*` returns 404 when `ENVIRONMENT=production`.
 - Syslog-based scripts (`windows-security.sh`, `network-devices.sh`, `mimikatz-*.sh`, ...)
   send to Logstash on UDP 514.
+- ML baseline: `python3 scripts/seed-ml-baseline.py` writes a week of synthetic normal activity so the
+  anomaly model can train on a fresh stack (then `POST /api/v1/security/ml/train`).
 - Threat intel: `scripts/setup-threat-intel-indices.sh`, then
   `scripts/populate-threat-intel-data.sh`, then `apt-simulations-test/threat-intel-test.sh`
   (all need `ELASTICSEARCH_PASSWORD` exported).
@@ -330,7 +335,8 @@ curl -u "elastic:$ELASTIC_PASSWORD" http://localhost:9200/_security/user/kibana_
 
 ### Security Context
 This is a security monitoring application. When modifying threat detection logic in `app/services/threat_detection.py`, ensure:
-- Risk scoring remains consistent (1-10 scale)
+- Risk scoring remains consistent (1-10 scale); ML risk comes from fixed percentile bands in
+  `app/services/ml/model.py` (`RISK_BANDS`), so keep those in sync with the documentation
 - Elasticsearch queries use proper time windows
 - Detection patterns align with actual threat indicators
 - New detections are logged appropriately
