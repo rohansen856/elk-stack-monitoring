@@ -19,6 +19,16 @@ import {
 } from "@/components/ui/input-otp"
 import { AlertCircle, Loader2, CheckCircle, ArrowLeft } from "lucide-react"
 import { toast } from "sonner"
+import { apiPath } from "@/lib/api-path"
+import { MIN_PASSWORD_LENGTH } from "@/lib/password-policy"
+
+/**
+ * Must equal the backend's OTP_LENGTH (default 8, app/config.py). The form
+ * used to accept exactly 6 digits while the backend issued 8, so no password
+ * reset could ever be completed. Override at build time with
+ * NEXT_PUBLIC_OTP_LENGTH if the backend is configured differently.
+ */
+const RESET_CODE_LENGTH = Number(process.env.NEXT_PUBLIC_OTP_LENGTH ?? 8)
 
 type Step = "email" | "otp" | "password" | "success"
 
@@ -40,7 +50,7 @@ export function ForgotPasswordForm() {
     clearError()
 
     try {
-      const response = await fetch("/api/auth/forgot-password", {
+      const response = await fetch(apiPath("/api/auth/forgot-password"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -65,8 +75,8 @@ export function ForgotPasswordForm() {
 
   const handleOtpSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (otp.length !== 6) {
-      setError("Please enter the complete 6-digit code")
+    if (otp.length !== RESET_CODE_LENGTH) {
+      setError(`Please enter the complete ${RESET_CODE_LENGTH}-digit code`)
       return
     }
     setStep("password")
@@ -83,14 +93,14 @@ export function ForgotPasswordForm() {
       return
     }
 
-    if (newPassword.length < 8) {
-      setError("Password must be at least 8 characters long")
+    if (newPassword.length < MIN_PASSWORD_LENGTH) {
+      setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters long`)
       setIsLoading(false)
       return
     }
 
     try {
-      const response = await fetch("/api/auth/reset-password", {
+      const response = await fetch(apiPath("/api/auth/reset-password"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -129,7 +139,7 @@ export function ForgotPasswordForm() {
             <CardHeader>
               <CardTitle className="text-2xl">Reset Password</CardTitle>
               <CardDescription>
-                Enter your email address and we'll send you a reset code
+                Enter your email address and we&apos;ll send you a reset code
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -189,7 +199,7 @@ export function ForgotPasswordForm() {
             <CardHeader>
               <CardTitle className="text-2xl">Enter Reset Code</CardTitle>
               <CardDescription>
-                We sent a 6-digit code to {email}
+                We sent a {RESET_CODE_LENGTH}-digit code to {email}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -205,7 +215,7 @@ export function ForgotPasswordForm() {
                   <Label>Verification Code</Label>
                   <div className="flex justify-center">
                     <InputOTP
-                      maxLength={6}
+                      maxLength={RESET_CODE_LENGTH}
                       value={otp}
                       onChange={(value) => {
                         setOtp(value)
@@ -214,12 +224,9 @@ export function ForgotPasswordForm() {
                       className="bg-secondary"
                     >
                       <InputOTPGroup>
-                        <InputOTPSlot index={0} />
-                        <InputOTPSlot index={1} />
-                        <InputOTPSlot index={2} />
-                        <InputOTPSlot index={3} />
-                        <InputOTPSlot index={4} />
-                        <InputOTPSlot index={5} />
+                        {Array.from({ length: RESET_CODE_LENGTH }, (_, i) => (
+                          <InputOTPSlot key={i} index={i} />
+                        ))}
                       </InputOTPGroup>
                     </InputOTP>
                   </div>
@@ -228,7 +235,7 @@ export function ForgotPasswordForm() {
                 <Button
                   type="submit"
                   className="w-full"
-                  disabled={otp.length !== 6}
+                  disabled={otp.length !== RESET_CODE_LENGTH}
                 >
                   Verify Code
                 </Button>
@@ -276,10 +283,10 @@ export function ForgotPasswordForm() {
                     }}
                     disabled={isLoading}
                     required
-                    minLength={8}
+                    minLength={MIN_PASSWORD_LENGTH}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Password must be at least 8 characters long
+                    Password must be at least {MIN_PASSWORD_LENGTH} characters long
                   </p>
                 </div>
 

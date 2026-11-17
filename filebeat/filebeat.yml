@@ -79,26 +79,6 @@ filebeat.inputs:
     data_stream.namespace: web
   fields_under_root: true
 
-processors:
-- add_host_metadata:
-    when.not.contains.tags: forwarded
-- add_docker_metadata: ~
-- add_kubernetes_metadata: ~
-- timestamp:
-    field: "@timestamp"
-    layouts:
-      - '2006-01-02T15:04:05.000Z'
-      - '2006-01-02T15:04:05Z'
-    test:
-      - '2023-05-26T09:15:00.000Z'
-
-# GeoIP enrichment for IP addresses
-- add_locale:
-    format: offset
-- fingerprint:
-    fields: ["message", "host.name", "log_type"]
-    target_field: "@metadata.fingerprint"
-
 output.elasticsearch:
   hosts: ["elasticsearch:9200"]
   username: "elastic"
@@ -135,14 +115,28 @@ filebeat.config.modules:
   reload.enabled: true
   reload.period: 10s
 
-# Threat Intel Processors
+# Processors. This used to be declared twice at the top level; YAML keeps
+# only the last key, so the timestamp/locale/fingerprint processors in the
+# first block were silently discarded.
 processors:
   - add_host_metadata:
       when.not.contains.tags: forwarded
   - add_cloud_metadata: ~
   - add_docker_metadata: ~
   - add_kubernetes_metadata: ~
-  
+  - timestamp:
+      field: "@timestamp"
+      layouts:
+        - '2006-01-02T15:04:05.000Z'
+        - '2006-01-02T15:04:05Z'
+      test:
+        - '2023-05-26T09:15:00.000Z'
+  - add_locale:
+      format: offset
+  - fingerprint:
+      fields: ["message", "host.name", "log_type"]
+      target_field: "@metadata.fingerprint"
+
   # Threat Intel Enrichment
   - script:
       lang: javascript

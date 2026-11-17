@@ -13,14 +13,16 @@ export default function NotFound() {
         <div>
           <h1 className="text-2xl font-bold text-foreground mb-2">Page not found</h1>
           <p className="text-muted-foreground">
-            The page you're looking for doesn't exist or has been moved.
+            The page you&apos;re looking for doesn&apos;t exist or has been moved.
           </p>
         </div>
 
         <div className="flex gap-3 justify-center">
-          <Link href="/">
-            <Button>Go Home</Button>
-          </Link>
+          {/* asChild renders the link itself as the button: a <button> nested
+              inside an <a> is invalid HTML and breaks keyboard focus. */}
+          <Button asChild>
+            <Link href="/">Go Home</Link>
+          </Button>
         </div>
       </div>
     </main>

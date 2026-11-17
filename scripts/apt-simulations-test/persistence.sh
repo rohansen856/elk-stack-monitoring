@@ -4,6 +4,7 @@
 # MITRE ATT&CK: T1078 - Valid Accounts, T1136 - Create Account
 
 API_BASE="${API_BASE:-http://localhost:8000}"
+source "$(dirname "$0")/_auth.sh"
 ACCOUNT_COUNT="${ACCOUNT_COUNT:-20}"
 
 echo "🔒 APT Simulation: Persistence Mechanisms"
@@ -120,7 +121,7 @@ for i in "${!registry_persistence[@]}"; do
     echo "    Command: ${command:0:50}..."
 
     # Log as PowerShell execution
-    curl -s -X POST "$API_BASE/api/v1/security/simulate/powershell" \
+    curl -s -X POST -H "$AUTH_HEADER" "$API_BASE/api/v1/security/simulate/powershell" \
         -H "Content-Type: application/json" \
         -d "{
             \"command\": \"$command\",
@@ -152,7 +153,7 @@ for i in "${!scheduled_tasks[@]}"; do
     echo "    Task: ${command:0:40}..."
 
     # Log as PowerShell execution
-    curl -s -X POST "$API_BASE/api/v1/security/simulate/powershell" \
+    curl -s -X POST -H "$AUTH_HEADER" "$API_BASE/api/v1/security/simulate/powershell" \
         -H "Content-Type: application/json" \
         -d "{
             \"command\": \"$command\",
@@ -183,7 +184,7 @@ for i in "${!wmi_persistence[@]}"; do
     echo "    WMI: ${command:0:40}..."
 
     # Log as PowerShell execution
-    curl -s -X POST "$API_BASE/api/v1/security/simulate/powershell" \
+    curl -s -X POST -H "$AUTH_HEADER" "$API_BASE/api/v1/security/simulate/powershell" \
         -H "Content-Type: application/json" \
         -d "{
             \"command\": \"$command\",

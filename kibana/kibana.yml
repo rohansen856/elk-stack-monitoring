@@ -12,7 +12,7 @@ xpack.security.enabled: true
 # Reverse proxy configuration
 server.basePath: "/monitoring"
 server.rewriteBasePath: true
-server.publicBaseUrl: "http://localhost/monitoring"
+server.publicBaseUrl: "https://localhost/monitoring"
 
 # Performance tuning
 server.maxPayload: 1048576
@@ -29,3 +29,7 @@ logging.appenders.default:
   type: console
   layout:
     type: pattern
+# Telemetry. The project documentation states it is disabled, but nothing
+# disabled it: Kibana showed "Usage collection is enabled" on first login.
+telemetry.optIn: false
+telemetry.allowChangingOptInStatus: false

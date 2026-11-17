@@ -40,7 +40,10 @@ echo ""
 
 send_event() {
   local event_json="$1"
-  echo "$event_json" | nc -w1 "$LOGSTASH_HOST" "$LOGSTASH_PORT" > /dev/null 2>&1
+  # The Logstash TCP input uses the json_lines codec: one event per line.
+  # The events below are pretty-printed, so each line used to arrive as a
+  # separate, unparseable event (_jsonparsefailure) and nothing was enriched.
+  echo "$event_json" | tr -d '\n' | { cat; echo; } | nc -w1 "$LOGSTASH_HOST" "$LOGSTASH_PORT" > /dev/null 2>&1
   ((EVENT_COUNT++))
 }
 

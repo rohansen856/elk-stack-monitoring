@@ -94,12 +94,14 @@ A comprehensive cybersecurity platform that combines task management with advanc
 ## 🎯 What's Included
 
 ### Frontend Application
-- **Next.js 16 Dashboard** - Modern, responsive security monitoring interface built with TypeScript
+- **Next.js 16 Dashboard** - Responsive task dashboard built with TypeScript
 - **Todo Management** - Full-featured task management with priority levels (low/medium/high) and due dates
-- **User Authentication** - Secure registration and login with username and email support
-- **Real-time Updates** - Live threat detection and system status
-- **Analytics Views** - Comprehensive security metrics and visualizations
+- **User Authentication** - Registration, login, logout and email-OTP password reset; the session lives in an httpOnly cookie
 - **Responsive Design** - Tailwind CSS and shadcn/ui component library
+
+> The web UI does not (yet) include security views. Threat detection is
+> exposed through the authenticated `/api/v1/security/*` API and through
+> Kibana (dashboards, Discover and the bundled detection rules).
 
 ### Backend API
 - **FastAPI Framework** - High-performance Python API
@@ -109,6 +111,8 @@ A comprehensive cybersecurity platform that combines task management with advanc
 
 ### Security Stack
 - **Threat Detection Engine** - Real-time analysis of security events
+- **Behavioural Anomaly Detection (ML)** - An Isolation Forest learns normal per-IP hourly behaviour and
+  turns deviations into explained 1-10 risk scores (`/api/v1/security/ml/*`)
 - **ELK Stack Integration** - Professional-grade log analysis platform
 - **Alerting System** - Multi-channel notifications for security incidents
 - **Prometheus Metrics** - System performance monitoring
@@ -118,7 +122,7 @@ A comprehensive cybersecurity platform that combines task management with advanc
 | Component | Technology | Purpose |
 |-----------|------------|---------|
 | **Frontend** | Next.js 16, TypeScript, Tailwind CSS, shadcn/ui | User interface and dashboards |
-| **Backend** | FastAPI, Python 3.11+, Pydantic | API server and business logic |
+| **Backend** | FastAPI, Python 3.12, Pydantic | API server and business logic |
 | **Database** | PostgreSQL, Redis, SQLAlchemy | Data persistence and caching |
 | **Security** | Elasticsearch, Logstash, Kibana | Security monitoring and analytics |
 | **Monitoring** | Filebeat, Metricbeat, Prometheus | System and security metrics |
@@ -132,6 +136,7 @@ A comprehensive cybersecurity platform that combines task management with advanc
 - **Data Exfiltration Monitoring** - Unusual data transfer pattern detection
 - **PowerShell Attack Detection** - Malicious script execution monitoring
 - **APT Kill-chain Analysis** - Advanced persistent threat correlation
+- **Behavioural Anomalies** - Machine-learned baseline catches unusual activity no fixed rule describes
 
 ### Risk Scoring System
 | Risk Level | Score | Response |
@@ -145,22 +150,22 @@ A comprehensive cybersecurity platform that combines task management with advanc
 ## 📈 Getting Started Guide
 
 ### For End Users
-1. Open the frontend at http://localhost:3000
-2. Register a new account with username, email, and password
-3. Login and explore the modern dashboard interface
-4. Use the todo system with priority levels and due dates
-5. Manage tasks with filtering, search, and organization features
-6. View analytics for security insights
+1. Open the frontend at https://localhost/frontend
+2. Register a new account with username, email, and a password of at least 12 characters
+3. Use the todo system with priority levels and due dates
+4. Manage tasks with filtering, search, and organization features
 
 ### For Security Teams
-1. Access Kibana at http://localhost:5601
-2. Review security dashboards and alerts
-3. Investigate threats using the search interface
-4. Set up custom alerting rules
-5. Monitor system health and performance
+1. Access Kibana at https://localhost/monitoring and sign in as `elastic`
+   (password: `ELASTIC_PASSWORD` in `.env`)
+2. Import the bundled detection rules: Stack Management -> Saved Objects ->
+   Import `kibana/export.ndjson` and `kibana/otx-detection-rules.ndjson`
+3. Generate test activity with `scripts/apt-simulations-test/*.sh`
+4. Query detections through the API, e.g. `GET /backend/api/v1/security/threats/scan`
+   (requires a bearer token from `/backend/api/v1/users/login`)
 
 ### For Developers
-1. Check API documentation at http://localhost:8000/docs
+1. Check API documentation at https://localhost/backend/docs
 2. Review the [CONTRIBUTING.md](CONTRIBUTING.md) for technical details
 3. Explore the codebase and security implementations
 4. Run tests and contribute improvements
@@ -169,7 +174,7 @@ A comprehensive cybersecurity platform that combines task management with advanc
 
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** - Technical documentation for developers
 - **[docs/](docs/)** - Comprehensive system documentation
-- **API Docs** - Available at http://localhost:8000/docs when running
+- **API Docs** - Available at https://localhost/backend/docs when running (non-production)
 
 ## 🛠️ System Requirements
 
@@ -190,30 +195,31 @@ A comprehensive cybersecurity platform that combines task management with advanc
 ### Check System Status
 ```bash
 # View all services
-docker-compose ps
+docker compose ps
 
 # Check service health
-curl http://localhost:8000/health
-curl http://localhost:9200/_cluster/health
+curl -k https://localhost/backend/health
+set -a; . ./.env; set +a   # load ELASTIC_PASSWORD into this shell
+curl -u "elastic:$ELASTIC_PASSWORD" http://localhost:9200/_cluster/health
 ```
 
 ### View Logs
 ```bash
 # All services
-docker-compose logs -f
+docker compose logs -f
 
 # Specific service
-docker-compose logs -f app
-docker-compose logs -f elasticsearch
+docker compose logs -f app
+docker compose logs -f elasticsearch
 ```
 
 ### Stop Services
 ```bash
 # Stop all services
-docker-compose down
+docker compose down
 
-# Stop and remove volumes
-docker-compose down -v
+# Stop and remove volumes (deletes all data)
+docker compose down -v
 ```
 
 ## 🌟 Use Cases

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { AlertCircle } from 'lucide-react'
 
@@ -30,8 +31,10 @@ export default function Error({
         </div>
 
         <div className="flex gap-3 justify-center">
-          <Button variant="outline" onClick={() => (window.location.href = '/')}>
-            Go Home
+          {/* <Link> applies the /frontend basePath; a raw window.location
+              assignment to '/' skipped it. */}
+          <Button variant="outline" asChild>
+            <Link href="/">Go Home</Link>
           </Button>
           <Button onClick={reset}>Try again</Button>
         </div>

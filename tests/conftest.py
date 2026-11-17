@@ -93,6 +93,42 @@ def fake_redis(monkeypatch):
     return fake
 
 
+class FakeElasticsearch:
+    """In-process stand-in for AsyncElasticsearch.
+
+    Without it the suite made real connections to 127.0.0.1:9200 (failures
+    were swallowed), and on a machine running the stack it wrote test events
+    into the developer's real cluster. Records what was indexed and what was
+    searched so tests can assert on it.
+    """
+
+    def __init__(self):
+        self.indexed = []
+        self.searches = []
+
+    async def index(self, index, document=None, body=None, **kwargs):
+        self.indexed.append({"index": index, "document": document if document is not None else body})
+        return {"result": "created", "_id": str(len(self.indexed))}
+
+    async def search(self, index=None, body=None, **kwargs):
+        self.searches.append({"index": index, "body": body})
+        return {"hits": {"total": {"value": 0, "relation": "eq"}, "hits": []}}
+
+    async def close(self):
+        return None
+
+
+@pytest.fixture(autouse=True)
+def fake_elasticsearch(monkeypatch):
+    """Route every get_elasticsearch() call in the app to one FakeElasticsearch."""
+    from app.services import es_client
+
+    fake = FakeElasticsearch()
+    monkeypatch.setattr(es_client, "build_elasticsearch_client", lambda: fake)
+    monkeypatch.setattr(es_client, "_client", None)
+    return fake
+
+
 @pytest.fixture(scope="function")
 def client(engine, fake_redis):
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

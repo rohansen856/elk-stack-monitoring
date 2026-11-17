@@ -56,7 +56,8 @@ The ELK stack has been enhanced with a comprehensive real-time threat detection 
 **Real-time APT Detection Scenarios**:
 - ✅ **Brute Force Campaigns**: Automated detection of 5+ failed attempts followed by success
 - ✅ **Credential Stuffing**: Pattern analysis across multiple accounts and IPs
-- ✅ **Off-hours Authentication**: Temporal anomaly detection (configurable time windows)
+- ✅ **Off-hours / Unusual Behaviour**: Isolation Forest behavioural anomaly scoring per source IP and hour,
+  including hour-of-day (`app/services/anomaly_detection.py`, `GET /api/v1/security/ml/anomalies`)
 - ✅ **Geographic Anomalies**: GeoIP-based location analysis and risk scoring
 - ✅ **Privileged Account Abuse**: Elevated privilege monitoring with external IP correlation
 - 🆕 **Live Risk Scoring**: Real-time threat assessment with automated response triggers

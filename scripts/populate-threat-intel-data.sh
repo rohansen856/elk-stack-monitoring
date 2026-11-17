@@ -221,6 +221,9 @@ echo ""
 echo "Threat intel data populated successfully!"
 echo ""
 echo "Verification:"
+# Refresh first: documents are not searchable (or countable) until the next
+# refresh, so the counts below always read 0 straight after indexing.
+curl -s -o /dev/null -X POST -u "$ES_USER:$ES_PASS" "$ES_URL/threat-intel-*/_refresh"
 curl -s -u "$ES_USER:$ES_PASS" "$ES_URL/threat-intel-ips-$CURRENT_DATE/_count" | grep -o '"count":[0-9]*' | cut -d: -f2 | xargs echo "  IPs:"
 curl -s -u "$ES_USER:$ES_PASS" "$ES_URL/threat-intel-domains-$CURRENT_DATE/_count" | grep -o '"count":[0-9]*' | cut -d: -f2 | xargs echo "  Domains:"
 curl -s -u "$ES_USER:$ES_PASS" "$ES_URL/threat-intel-hashes-$CURRENT_DATE/_count" | grep -o '"count":[0-9]*' | cut -d: -f2 | xargs echo "  Hashes:"

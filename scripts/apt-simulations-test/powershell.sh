@@ -4,6 +4,7 @@
 # MITRE ATT&CK: T1059.001 - PowerShell
 
 API_BASE="${API_BASE:-http://localhost:8000}"
+source "$(dirname "$0")/_auth.sh"
 
 echo "💻 APT Simulation: PowerShell Execution"
 echo "======================================="
@@ -78,7 +79,7 @@ for i in "${!powershell_attacks[@]}"; do
     echo "    Command: ${command:0:50}..."
 
     # Send to simulation API - use python to create proper JSON with raw string
-    response=$(python3 <<EOF | curl -s -X POST "$API_BASE/api/v1/security/simulate/powershell" -H "Content-Type: application/json" -d @-
+    response=$(python3 <<EOF | curl -s -X POST -H "$AUTH_HEADER" "$API_BASE/api/v1/security/simulate/powershell" -H "Content-Type: application/json" -d @-
 import json
 data = {
     'command': r'''$command''',

@@ -60,7 +60,7 @@ services:
     ports:
       - "127.0.0.1:5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user -d todo_db"]
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -132,7 +132,7 @@ services:
       - "127.0.0.1:9600:9600" # Logstash API
       - "127.0.0.1:514:514/udp" # Syslog UDP
       - "127.0.0.1:514:514/tcp" # Syslog TCP
-      - "127.0.0.1:12201:12201" # GELF
+      - "127.0.0.1:12201:12201/udp" # GELF (the gelf input defaults to UDP)
     volumes:
       - ./logstash/pipeline:/usr/share/logstash/pipeline:ro
     depends_on:
@@ -183,42 +183,58 @@ services:
           # there is nothing to rewrite. Editing it here previously mutated a
           # tracked file in the working tree through the bind mount.
         else
-          echo "WARNING: Failed to set password (HTTP $$http_code)"
+          # Fail hard: continuing let Kibana start with a password Elasticsearch
+          # rejects, which surfaced later as an opaque Kibana auth loop.
+          echo "ERROR: Failed to set kibana_system password (HTTP $$http_code)"
+          exit 1
         fi
 
-        # 2. Create Filebeat index template
-        echo 'Setting up Filebeat index template...'
-        curl -s -X PUT "http://elasticsearch:9200/_index_template/filebeat" \
+        # 2. Index template for Sentinel security event indices.
+        # Without it every field was dynamically mapped as text, so IP range
+        # queries compared strings ("10.3.0.1" sorted outside 10.0.0.0/8) and
+        # aggregations on source.ip/src_ip were impossible.
+        echo 'Setting up Sentinel security event index template...'
+        code=$$(curl -s -o /dev/null -w '%{http_code}' -X PUT \
+          "http://elasticsearch:9200/_index_template/sentinel-security-events" \
           -u "elastic:$${ELASTIC_PASSWORD}" \
           -H "Content-Type: application/json" \
           -d '{
-            "index_patterns": ["filebeat-*", "security-logs*"],
-            "data_stream": {},
-            "priority": 200,
+            "index_patterns": ["security-*-logs-*", "security-threats-*", "security-alerts-*"],
+            "priority": 300,
             "template": {
-              "settings": {
-                "number_of_shards": 1,
-                "number_of_replicas": 0
+              "settings": { "number_of_shards": 1, "number_of_replicas": 0 },
+              "mappings": {
+                "properties": {
+                  "@timestamp":  { "type": "date" },
+                  "src_ip":      { "type": "ip", "ignore_malformed": true },
+                  "source":      { "properties": {
+                    "ip":    { "type": "ip", "ignore_malformed": true },
+                    "port":  { "type": "long", "ignore_malformed": true },
+                    "bytes": { "type": "long", "ignore_malformed": true } } },
+                  "destination": { "properties": {
+                    "ip":    { "type": "ip", "ignore_malformed": true },
+                    "port":  { "type": "long", "ignore_malformed": true },
+                    "bytes": { "type": "long", "ignore_malformed": true } } },
+                  "network":     { "properties": {
+                    "bytes":     { "type": "long", "ignore_malformed": true },
+                    "bytes_out": { "type": "long", "ignore_malformed": true } } },
+                  "risk_score":  { "type": "integer", "ignore_malformed": true }
+                }
               }
             }
-          }' > /dev/null && echo '✓ Filebeat template created'
+          }')
+        if [ "$$code" -ne 200 ]; then
+          echo "ERROR: Failed to create security event template (HTTP $$code)"
+          exit 1
+        fi
+        echo '✓ Security event template created'
 
-        # 3. Create Metricbeat index template
-        echo 'Setting up Metricbeat index template...'
-        curl -s -X PUT "http://elasticsearch:9200/_index_template/metricbeat" \
-          -u "elastic:$${ELASTIC_PASSWORD}" \
-          -H "Content-Type: application/json" \
-          -d '{
-            "index_patterns": ["metricbeat-*"],
-            "data_stream": {},
-            "priority": 200,
-            "template": {
-              "settings": {
-                "number_of_shards": 1,
-                "number_of_replicas": 0
-              }
-            }
-          }' > /dev/null && echo '✓ Metricbeat template created'
+        # 3. Filebeat and Metricbeat install their own ECS templates
+        # (setup.template.* in their configs). A higher-priority, mapping-less
+        # template created here used to shadow Filebeat's, so security-logs-*
+        # lost every ECS mapping. Remove it from clusters that still have it.
+        curl -s -o /dev/null -X DELETE -u "elastic:$${ELASTIC_PASSWORD}" \
+          "http://elasticsearch:9200/_index_template/filebeat" || true
 
         echo '=== Setup complete ==='
     restart: "no"
@@ -298,7 +314,8 @@ services:
         condition: service_healthy
       kibana:
         condition: service_healthy
-    command: metricbeat -e -strict.perms=false
+    # -system.hostfs makes the system module report the host, not the container.
+    command: metricbeat -e -strict.perms=false -system.hostfs=/hostfs
     restart: no
     networks:
       - default
@@ -322,8 +339,10 @@ services:
         condition: service_healthy
       kibana:
         condition: service_healthy
+      # Healthy, not merely started: the beats input opens well after the
+      # container starts, and Packetbeat logged publish errors until it did.
       logstash:
-        condition: service_started
+        condition: service_healthy
     environment:
       - ELASTICSEARCH_HOSTS=http://localhost:9200
       - ELASTICSEARCH_USERNAME=elastic
@@ -348,8 +367,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - .:/app
+    # Runs the migrations baked into the image. A `.:/app` bind mount used to
+    # replace the image contents with the working tree, so a migration could
+    # run against code that was never built or reviewed.
     command: ["alembic", "upgrade", "head"]
     restart: "no"
 
@@ -368,6 +388,14 @@ services:
         condition: service_healthy
       logstash:
         condition: service_healthy
+    environment:
+      # Uvicorn only honours X-Forwarded-For from trusted peers (default:
+      # 127.0.0.1), so every request appeared to come from the nginx or
+      # frontend container. Rate limits were therefore global, and security
+      # events blamed one internal IP. The app port is only reachable from the
+      # compose network and loopback, and nginx overwrites X-Forwarded-For
+      # with the real client address, so trusting peers here is safe.
+      FORWARDED_ALLOW_IPS: "*"
     command:
       [
         "uvicorn",

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Trash2, Loader2, Calendar, Check } from "lucide-react"
+import { toast } from "sonner"
 
 interface TodoCardProps {
   todo: Todo
@@ -26,8 +27,20 @@ export function TodoCard({
     setIsDeleting(true)
     try {
       await onDelete()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not delete the task")
     } finally {
       setIsDeleting(false)
+    }
+  }
+
+  // onToggle re-throws on failure; handle it here instead of leaving an
+  // unhandled promise rejection behind the click handler.
+  const handleToggle = async () => {
+    try {
+      await onToggle()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update the task")
     }
   }
 
@@ -152,7 +165,7 @@ export function TodoCard({
         <Button
           variant="ghost"
           size="sm"
-          onClick={onToggle}
+          onClick={handleToggle}
           disabled={isLoading}
           className={`cursor-pointer transition-colors 
           ${

@@ -9,8 +9,10 @@ export function Header() {
   const router = useRouter()
   const { user, logout } = useAuthStore()
 
-  const handleLogout = () => {
-    logout()
+  // Await the server-side cookie removal before navigating: otherwise the
+  // proxy can still see the session cookie and bounce back to /dashboard.
+  const handleLogout = async () => {
+    await logout()
     router.push('/login')
   }
 

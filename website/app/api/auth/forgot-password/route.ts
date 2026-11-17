@@ -1,39 +1,26 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse } from 'next/server'
+
+import { backendFetch, relayError } from '@/lib/backend'
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { email } = body
+    const { email } = await request.json()
 
     if (!email) {
-      return NextResponse.json({ detail: "Email is required" }, { status: 400 })
+      return NextResponse.json({ detail: 'Email is required' }, { status: 400 })
     }
 
-    const backendUrl = process.env.BACKEND_URL || "http://localhost:8000"
-
-    const response = await fetch(`${backendUrl}/users/forgot-password`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+    const response = await backendFetch(request, '/users/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),
     })
 
-    const data = await response.json()
+    if (!response.ok) return relayError(response, 'Failed to send reset email')
 
-    if (!response.ok) {
-      return NextResponse.json(
-        { detail: data.detail || "Failed to send reset email" },
-        { status: response.status }
-      )
-    }
-
-    return NextResponse.json(data)
+    return NextResponse.json(await response.json())
   } catch (error) {
-    console.error("Forgot password error:", error)
-    return NextResponse.json(
-      { detail: "Internal server error" },
-      { status: 500 }
-    )
+    console.error('[AUTH] Forgot password error:', error)
+    return NextResponse.json({ detail: 'Internal server error' }, { status: 500 })
   }
 }

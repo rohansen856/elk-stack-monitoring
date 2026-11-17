@@ -1,17 +1,28 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import structlog
 from typing import Dict, Any, Optional
+from elasticsearch import AsyncElasticsearch
 from app.services.es_client import get_elasticsearch
 import socket
 
 logger = structlog.get_logger()
 
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 class SecurityLogger:
     def __init__(self):
-        # Connect to Elasticsearch with authentication (required since xpack.security.enabled=true)
-        self.es = get_elasticsearch()
         self.hostname = socket.gethostname()
         self.service_name = "threat-detection-api"
+
+    @property
+    def es(self) -> AsyncElasticsearch:
+        # Resolved on every use rather than captured at import: the shared
+        # authenticated client is closed and rebuilt across application
+        # lifespans, and a captured reference kept using the closed one.
+        return get_elasticsearch()
 
     async def log_authentication_event(self,
                                      event_type: str,
@@ -22,7 +33,7 @@ class SecurityLogger:
                                      additional_data: Optional[Dict[str, Any]] = None):
         """Log authentication events to Elasticsearch"""
 
-        timestamp = datetime.utcnow()
+        timestamp = _utcnow()
 
         # Create ECS-compliant security event
         event_doc = {
@@ -100,7 +111,7 @@ class SecurityLogger:
                                  additional_data: Optional[Dict[str, Any]] = None):
         """Log API access events for detecting reconnaissance and data exfiltration"""
 
-        timestamp = datetime.utcnow()
+        timestamp = _utcnow()
 
         # Determine event outcome
         outcome = "success" if 200 <= status_code < 400 else "failure"
@@ -181,7 +192,7 @@ class SecurityLogger:
                                   source_ip: Optional[str] = None):
         """Log PowerShell execution events"""
 
-        timestamp = datetime.utcnow()
+        timestamp = _utcnow()
 
         event_doc = {
             "@timestamp": timestamp.isoformat(),
@@ -250,7 +261,7 @@ class SecurityLogger:
                                additional_data: Optional[Dict[str, Any]] = None):
         """Log network events for data exfiltration detection"""
 
-        timestamp = datetime.utcnow()
+        timestamp = _utcnow()
 
         event_doc = {
             "@timestamp": timestamp.isoformat(),
@@ -318,7 +329,7 @@ class SecurityLogger:
                                         source_ip: Optional[str] = None):
         """Log privilege escalation events"""
 
-        timestamp = datetime.utcnow()
+        timestamp = _utcnow()
 
         event_doc = {
             "@timestamp": timestamp.isoformat(),
@@ -384,7 +395,7 @@ class SecurityLogger:
                                        logon_type: int = 3):
         """Log lateral movement/network logon events"""
 
-        timestamp = datetime.utcnow()
+        timestamp = _utcnow()
 
         event_doc = {
             "@timestamp": timestamp.isoformat(),

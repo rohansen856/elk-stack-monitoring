@@ -40,6 +40,16 @@ class Settings(BaseSettings):
     # Observability
     metrics_token: Optional[str] = None
 
+    # Behavioural anomaly detection (app/services/anomaly_detection.py)
+    ml_anomaly_enabled: bool = True
+    ml_baseline_days: int = 7            # training window, before the scoring window
+    ml_score_window_minutes: int = 60    # recent activity that gets scored
+    ml_min_training_samples: int = 50    # entity-hours needed before scores are trusted
+    ml_retrain_minutes: int = 30         # cached model is refreshed after this long
+    # Anomalies at/above this join /threats/scan (and so alerting). Risk 8 =
+    # rarer than 99% of baseline hours: ~1% of normal hours by construction.
+    ml_threat_min_risk: int = 8
+
     # Alerting
     slack_webhook_url: Optional[str] = None
     alert_email_to: Optional[str] = None

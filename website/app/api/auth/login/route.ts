@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { backendFetch, relayError } from '@/lib/backend'
 import { setSessionCookie, setUserCookie } from '@/lib/server-session'
-
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000/api/v1'
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,22 +14,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const response = await fetch(`${BACKEND_URL}/users/login`, {
+    const response = await backendFetch(request, '/users/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ username: email, password }),
     })
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ detail: 'Login failed' }))
-      return NextResponse.json(errorData, { status: response.status })
-    }
+    if (!response.ok) return relayError(response, 'Login failed')
 
     const data = await response.json()
 
     // Fetch the profile server-side so the client gets user details without
     // ever handling the token itself.
-    const meResponse = await fetch(`${BACKEND_URL}/users/me`, {
+    const meResponse = await backendFetch(request, '/users/me', {
       headers: { Authorization: `Bearer ${data.access_token}` },
     })
     const user = meResponse.ok ? await meResponse.json() : null

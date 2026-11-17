@@ -1,7 +1,8 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from typing import List
 from app.config import settings
 from app.services.threat_detection import threat_detector
+from app.services.anomaly_detection import anomaly_detector
 from app.services.alerting import alerting_service
 from app.services.security_logger import security_logger
 from pydantic import BaseModel, Field
@@ -59,8 +60,10 @@ async def run_threat_scan(background_tasks: BackgroundTasks):
     data_exfil_threats = await threat_detector.detect_data_exfiltration()
     powershell_threats = await threat_detector.detect_powershell_attacks()
     apt_threats = await threat_detector.correlate_apt_indicators()
-    
-    all_threats = brute_force_threats + data_exfil_threats + powershell_threats + apt_threats
+    # Behavioural anomalies the fixed-threshold rules above cannot express.
+    ml = await anomaly_detector.scan_threats()
+
+    all_threats = brute_force_threats + data_exfil_threats + powershell_threats + apt_threats + ml["threats"]
     
     # Send alerts for high-risk threats
     for threat in all_threats:
@@ -71,8 +74,24 @@ async def run_threat_scan(background_tasks: BackgroundTasks):
     return {
         "total_threats": len(all_threats),
         "high_risk_threats": len([t for t in all_threats if t.get('risk_score', 0) >= 7]),
-        "threats": all_threats
+        "threats": all_threats,
+        "ml_model": ml["model"],
     }
+
+@router.get("/ml/status")
+async def ml_status():
+    """State of the behavioural anomaly model (training window, sample count, features)."""
+    return anomaly_detector.status()
+
+@router.post("/ml/train")
+async def ml_train():
+    """Retrain the behavioural anomaly model now instead of waiting for ML_RETRAIN_MINUTES."""
+    return await anomaly_detector.train(force=True)
+
+@router.get("/ml/anomalies")
+async def ml_anomalies(min_risk: int = Query(1, ge=1, le=10)):
+    """Score each source IP's recent behaviour against the learned baseline (1-10)."""
+    return await anomaly_detector.detect(min_risk=min_risk)
 
 @router.get("/threats/brute-force")
 async def detect_brute_force():

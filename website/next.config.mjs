@@ -1,6 +1,15 @@
+// Served behind nginx at /frontend. Exposed to client code as
+// NEXT_PUBLIC_BASE_PATH because Next adds the basePath to <Link> and
+// router.push, but NOT to fetch(): client calls to "/api/..." only worked
+// through an nginx rewrite and 404'd when the app was reached directly.
+const basePath = '/frontend'
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  basePath: '/frontend',
+  basePath,
+  env: {
+    NEXT_PUBLIC_BASE_PATH: basePath,
+  },
   reactStrictMode: true,
   poweredByHeader: false,
   compress: true,
@@ -12,33 +21,10 @@ const nextConfig = {
     minimumCacheTTL: 60,
   },
   headers: async () => [
-    {
-      source: '/:path*',
-      headers: [
-        {
-          key: 'X-Content-Type-Options',
-          value: 'nosniff',
-        },
-        {
-          key: 'X-Frame-Options',
-          value: 'DENY',
-        },
-        {
-          key: 'X-XSS-Protection',
-          value: '1; mode=block',
-        },
-        {
-          key: 'Referrer-Policy',
-          value: 'strict-origin-when-cross-origin',
-        },
-        {
-          key: 'Permissions-Policy',
-          value: 'geolocation=(), microphone=(), camera=()',
-        },
-          // Strict-Transport-Security is set by nginx, which terminates TLS.
-          // Emitting it here as well produced a duplicate header.
-      ],
-    },
+    // Security headers (X-Frame-Options, X-Content-Type-Options, CSP,
+    // Referrer-Policy, Permissions-Policy, HSTS) are set by nginx, which
+    // fronts every request. Emitting them here as well sent duplicates, and
+    // X-Frame-Options even conflicted (DENY here vs SAMEORIGIN in nginx).
     {
       source: '/api/:path*',
       headers: [

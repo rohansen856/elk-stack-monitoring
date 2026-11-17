@@ -1,3 +1,5 @@
+import { apiPath } from './api-path'
+
 export interface ApiError {
   detail?: string
   message?: string
@@ -45,7 +47,7 @@ async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<
     ...(options.headers as Record<string, string>),
   }
 
-  const response = await fetch(endpoint, {
+  const response = await fetch(apiPath(endpoint), {
     ...options,
     headers,
     credentials: 'same-origin',
@@ -53,7 +55,10 @@ async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<
 
   if (!response.ok) {
     const error = (await response.json().catch(() => ({}))) as ApiError
-    throw new Error(error.detail || error.message || 'API request failed')
+    // Route handlers normalise FastAPI's detail into a string; guard anyway so
+    // an object can never surface as "[object Object]".
+    const detail = typeof error.detail === 'string' ? error.detail : undefined
+    throw new Error(detail || error.message || 'API request failed')
   }
 
   return response.json() as Promise<T>
@@ -85,7 +90,7 @@ export const todosApi = {
     }),
 
   deleteTodo: (id: number) =>
-    apiCall<{ message: string }>(`/api/todos/${id}`, {
+    apiCall<{ message?: string }>(`/api/todos/${id}`, {
       method: 'DELETE',
     }),
 }

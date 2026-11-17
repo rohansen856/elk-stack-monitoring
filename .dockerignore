@@ -30,3 +30,13 @@ AUDIT/
 htmlcov/
 .mypy_cache/
 .ruff_cache/
+
+# Not part of the backend runtime: keep the image small and free of unrelated
+# material (the frontend has its own build context).
+website/
+docs/
+assets/
+AUDIT/
+k8s/
+.github/
+.local-mocks/

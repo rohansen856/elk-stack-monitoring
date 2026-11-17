@@ -4,6 +4,7 @@
 # MITRE ATT&CK: T1041 - Exfiltration Over C2 Channel
 
 API_BASE="${API_BASE:-http://localhost:8000}"
+source "$(dirname "$0")/_auth.sh"
 
 echo "📤 APT Simulation: Data Exfiltration"
 echo "===================================="
@@ -60,7 +61,7 @@ for session in {1..5}; do
     echo "    Volume: ${data_size_mb}MB (${data_size_bytes} bytes)"
 
     # Send data exfiltration event
-    response=$(curl -s -X POST "$API_BASE/api/v1/security/simulate/data-exfiltration" \
+    response=$(curl -s -X POST -H "$AUTH_HEADER" "$API_BASE/api/v1/security/simulate/data-exfiltration" \
         -H "Content-Type: application/json" \
         -d "{
             \"source_ip\": \"$source_ip\",
@@ -83,7 +84,7 @@ for session in {1..5}; do
         for chunk in $(seq 1 $chunks); do
             chunk_size=$((200 * 1024 * 1024))
 
-            curl -s -X POST "$API_BASE/api/v1/security/simulate/data-exfiltration" \
+            curl -s -X POST -H "$AUTH_HEADER" "$API_BASE/api/v1/security/simulate/data-exfiltration" \
                 -H "Content-Type: application/json" \
                 -d "{
                     \"source_ip\": \"$source_ip\",
@@ -117,7 +118,7 @@ for activity in "${recon_activities[@]}"; do
     echo "  🔍 Data discovery: ${activity:0:40}..."
 
     # Log as PowerShell execution
-    curl -s -X POST "$API_BASE/api/v1/security/simulate/powershell" \
+    curl -s -X POST -H "$AUTH_HEADER" "$API_BASE/api/v1/security/simulate/powershell" \
         -H "Content-Type: application/json" \
         -d "{
             \"command\": \"$activity\",
